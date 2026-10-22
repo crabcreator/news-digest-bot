@@ -62,9 +62,10 @@ def _render_sections(by_category: dict[str, list[str]]) -> list[str]:
     return sections
 
 
-def _assemble(target_date: date, sections: list[str]) -> str:
+def _assemble(target_date: date, sections: list[str], notice: str | None = None) -> str:
     body = _SECTION_SEP.join(sections + [FOOTER])
-    return f"{_header(target_date, len(body))}\n\n{body}"
+    intro = f"{notice}\n\n" if notice else ""
+    return f"{_header(target_date, len(body))}\n\n{intro}{body}"
 
 
 def resolve_topics(
@@ -96,6 +97,7 @@ def render_digest(
     allowed_categories: Sequence[str],
     target_date: date,
     max_chars: int = TARGET_MAX_CHARS,
+    notice: str | None = None,
 ) -> str | None:
     """Build the final HTML digest, or return None if no valid topic remains after validation.
 
@@ -107,7 +109,7 @@ def render_digest(
         by_category: dict[str, list[str]] = {}
         for category, topic, item in resolved:
             by_category.setdefault(category, []).append(_render_topic(topic, item))
-        text = _assemble(target_date, _render_sections(by_category))
+        text = _assemble(target_date, _render_sections(by_category), _esc(notice) if notice else None)
         if len(text) <= max_chars or len(resolved) == 1:
             return text
         resolved.pop()

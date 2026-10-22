@@ -14,7 +14,8 @@ from core.categories import ALL_CATEGORY_KEYS
 from db import crud
 from db.models import utcnow
 from services.summarizer.formatter import render_digest, render_empty_digest
-from services.summarizer.gemini_client import GeminiSummarizer
+from services.summarizer.fallback import FALLBACK_NOTICE, build_fallback_topics
+from services.summarizer.gemini_client import GeminiSummarizer, SummarizationError
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,18 @@ async def get_or_generate_digest(
         if not items:
             return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
 
-        topics = await summarizer.generate_topics(items, cats, profile.window_hours)
+        try:
+            topics = await summarizer.generate_topics(items, cats, profile.window_hours)
+        except SummarizationError:
+            # Gemini is down/overloaded: serve plain headlines instead of failing. Not cached, so the
+            # next request tries Gemini again.
+            fallback_text = render_digest(
+                build_fallback_topics(items, cats), items, cats, target_date, notice=FALLBACK_NOTICE
+            )
+            if fallback_text is None:
+                raise
+            logger.warning("Gemini unavailable; serving extractive fallback digest (key=%s)", key)
+            return DigestResult(fallback_text, None, False)
         text = render_digest(topics, items, cats, target_date)
         if text is None:
             # Gemini found nothing significant (or nothing valid): calm notice, not cached.

@@ -99,8 +99,24 @@ async def test_blocked_user_is_deactivated_others_still_served(session_factory):
     assert sorted(await logs(session_factory)) == [(1, "blocked"), (2, "sent")]
 
 
-async def test_generation_failure_is_logged_not_raised(session_factory):
+async def test_gemini_failure_falls_back_to_headline_digest(session_factory):
     await seed(session_factory)
+    bot = make_bot()
+    summarizer = FakeSummarizer(error=SummarizationError("overloaded"))
+    assert await jobs.check_and_send_scheduled_digests(bot, session_factory, summarizer, DELIVERY_MOMENT) == 2
+    text = bot.send_message.await_args.args[1]
+    assert "ШІ-підсумок тимчасово недоступний" in text and "🔗" in text
+    assert sorted(await logs(session_factory)) == [(1, "sent"), (2, "sent")]
+
+
+async def test_generation_failure_without_usable_items_is_logged_not_raised(session_factory):
+    async with session_factory() as db:
+        for uid in (1, 2):
+            await crud.get_or_create_user(db, uid)
+        # Uncategorised item: the fallback cannot place it, so there is nothing to send.
+        await crud.add_news_items(
+            db, [crud.NewsItemData("https://e.com/9", "T", "Src", DELIVERY_MOMENT - timedelta(hours=2), None, "x")]
+        )
     bot = make_bot()
     summarizer = FakeSummarizer(error=SummarizationError("quota"))
     assert await jobs.check_and_send_scheduled_digests(bot, session_factory, summarizer, DELIVERY_MOMENT) == 0
