@@ -23,7 +23,7 @@ Build an asynchronous, production-ready Telegram bot in Python that periodically
   * `SQLAlchemy` (v2.0 async engine with `aiosqlite`) or raw `aiosqlite`.  
 * **LLM Integration:**  
   * `google-genai` SDK (Google Gemini API).  
-  * Target model: `gemini-2.5-flash` (or `gemini-1.5-flash`).  
+  * Target model: `gemini-3.5-flash` (or `gemini-3.8-flash`).  
 * **Task Scheduling:**  
   * `APScheduler` (`AsyncIOScheduler`) integrated into the asyncio event loop.  
 * **Configuration and Validation:**  
