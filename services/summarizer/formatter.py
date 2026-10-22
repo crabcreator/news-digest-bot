@@ -23,6 +23,11 @@ WORDS_PER_MINUTE = 180
 _SECTION_SEP = f"\n\n{DIVIDER}\n\n"
 
 
+def _esc(text: str) -> str:
+    """Escape text content for Telegram HTML (&, <, >); quotes only need escaping inside attributes."""
+    return html.escape(text, quote=False)
+
+
 def _one_line(text: str) -> str:
     return " ".join(text.split())
 
@@ -41,9 +46,9 @@ def _header(target_date: date, body_chars: int | None = None) -> str:
 
 def _render_topic(topic: Topic, item: NewsItem) -> str:
     return (
-        f"• <b>{html.escape(_one_line(topic.headline))}</b>\n"
-        f"{html.escape(_one_line(topic.summary))}\n"
-        f'🔗 Джерело: <a href="{html.escape(item.url, quote=True)}">{html.escape(item.source)}</a>'
+        f"• <b>{_esc(_one_line(topic.headline))}</b>\n"
+        f"{_esc(_one_line(topic.summary))}\n"
+        f'🔗 Джерело: <a href="{html.escape(item.url, quote=True)}">{_esc(item.source)}</a>'
     )
 
 
@@ -53,7 +58,7 @@ def _render_sections(by_category: dict[str, list[str]]) -> list[str]:
         blocks = by_category.get(key)
         if blocks:
             cat = CATEGORY_BY_KEY[key]
-            sections.append(f"{cat.emoji} <b>{html.escape(cat.title)}</b>\n" + "\n\n".join(blocks))
+            sections.append(f"{cat.emoji} <b>{_esc(cat.title)}</b>\n" + "\n\n".join(blocks))
     return sections
 
 

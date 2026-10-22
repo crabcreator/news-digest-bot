@@ -23,8 +23,9 @@ Your tasks:
 an empty list if nothing significant happened). Keep a sensible balance between the allowed categories.
 4. For every selected event write:
    - "category": exactly one key from the allowed categories list given in the request;
-   - "headline": a short, neutral headline in Ukrainian (up to 90 characters, no clickbait, no emoji, no markup);
-   - "summary": 2-3 concise sentences in Ukrainian: what happened, context and impact (up to 350 characters, no markup);
+   - "headline": a short, neutral headline in Ukrainian (up to 80 characters, no clickbait, no emoji, no markup);
+   - "summary": 2 short sentences in Ukrainian: what happened, plus context or impact (up to 250 characters in total, \
+no markup). The whole digest must stay compact enough to read on one phone screen;
    - "source_id": the ID of the single most reliable and informative item of the cluster.
 
 Rules:

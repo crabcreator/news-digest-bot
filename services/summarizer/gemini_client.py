@@ -38,16 +38,18 @@ class GeminiSummarizer:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.5-flash",
-        timeout_seconds: int = 60,
+        model: str = "gemini-3.5-flash",
+        timeout_seconds: int = 90,
         max_attempts: int = 3,
         client: genai.Client | None = None,
         backoff_base_seconds: float = 2.0,
+        fallback_model: str | None = None,
     ) -> None:
         self._client = client or genai.Client(
             api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000)
         )
-        self._model = model
+        # Attempts rotate through these models, so an overloaded primary does not sink the whole request.
+        self._models = [model] + ([fallback_model] if fallback_model and fallback_model != model else [])
         self._timeout = timeout_seconds
         self._max_attempts = max_attempts
         self._backoff_base = backoff_base_seconds
@@ -70,10 +72,11 @@ class GeminiSummarizer:
 
         last_error: Exception | None = None
         for attempt in range(1, self._max_attempts + 1):
+            model = self._models[(attempt - 1) % len(self._models)]
             try:
                 # Outer timeout guards against hangs the HTTP-level timeout does not catch.
                 response = await asyncio.wait_for(
-                    self._client.aio.models.generate_content(model=self._model, contents=prompt, config=config),
+                    self._client.aio.models.generate_content(model=model, contents=prompt, config=config),
                     timeout=self._timeout + 5,
                 )
                 return self._parse(response.text)
@@ -81,10 +84,10 @@ class GeminiSummarizer:
                 last_error = exc
                 if exc.code not in RETRYABLE_STATUS_CODES:
                     raise SummarizationError(f"Gemini API error {exc.code}: {exc.message}") from exc
-                logger.warning("Gemini attempt %d/%d failed: %s %s", attempt, self._max_attempts, exc.code, exc.message)
+                logger.warning("Gemini attempt %d/%d (%s) failed: %s %s", attempt, self._max_attempts, model, exc.code, exc.message)
             except (asyncio.TimeoutError, TimeoutError) as exc:
                 last_error = exc
-                logger.warning("Gemini attempt %d/%d timed out", attempt, self._max_attempts)
+                logger.warning("Gemini attempt %d/%d (%s) timed out", attempt, self._max_attempts, model)
             except (ValueError, ValidationError, json.JSONDecodeError) as exc:
                 last_error = exc
                 logger.warning("Gemini attempt %d/%d returned invalid output: %s", attempt, self._max_attempts, exc)

@@ -31,6 +31,7 @@ async def main() -> None:
     summarizer = GeminiSummarizer(
         api_key=settings.gemini_api_key,
         model=settings.gemini_model,
+        fallback_model=settings.gemini_fallback_model,
         timeout_seconds=settings.gemini_timeout_seconds,
         max_attempts=settings.gemini_max_attempts,
     )
