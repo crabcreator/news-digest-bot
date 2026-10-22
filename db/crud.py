@@ -32,8 +32,12 @@ async def get_or_create_user(
     delivery_hour: int = 21,
     delivery_minute: int = 0,
     timezone: str = "Europe/Kyiv",
+    reactivate: bool = False,
 ) -> User:
-    """Return the user, creating it if needed. Re-activates returning users and refreshes profile."""
+    """Return the user, creating it if needed and refreshing the profile.
+
+    `reactivate=True` (used by /start) re-subscribes users who were deactivated or blocked the bot.
+    """
     user = await session.get(User, user_id)
     if user is None:
         user = User(
@@ -50,7 +54,8 @@ async def get_or_create_user(
     else:
         user.username = username
         user.first_name = first_name
-        user.is_active = True
+        if reactivate:
+            user.is_active = True
     await session.commit()
     await session.refresh(user)
     return user
