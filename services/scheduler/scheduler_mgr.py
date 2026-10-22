@@ -30,6 +30,8 @@ def create_scheduler(
         id="fetch_rss",
         max_instances=1,
         coalesce=True,
+        # Startup (DB init, bot commands) can take seconds; the default 1s grace would skip the first run.
+        misfire_grace_time=300,
         next_run_time=datetime.now(timezone.utc),  # populate the DB right at startup
     )
     scheduler.add_job(
