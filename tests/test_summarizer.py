@@ -200,3 +200,33 @@ async def test_service_no_categories_returns_notice(session):
     fake = FakeSummarizer()
     r = await get_or_generate_digest(session, fake, [], "daily")
     assert r.digest_id is None and fake.calls == 0
+
+
+async def test_gemini_rotates_to_fallback_model_on_overload():
+    used = []
+
+    class RecordingModels(FakeModels):
+        async def generate_content(self, **kwargs):
+            used.append(kwargs["model"])
+            return await super().generate_content(**kwargs)
+
+    overloaded = genai_errors.ServerError(503, {"error": {"message": "high demand"}})
+    models = RecordingModels([overloaded, GOOD])
+    client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    s = GeminiSummarizer("k", model="primary", fallback_model="backup", client=client, backoff_base_seconds=0)
+    assert len(await s.generate_topics([item(1)], ALL, 24)) == 1
+    assert used == ["primary", "backup"]
+
+
+def test_render_keeps_apostrophes_readable():
+    topics = [Topic(category="war", headline="Прем'єр", summary="Дев'ять днів", source_id=1)]
+    text = render_digest(topics, [item(1)], ALL, D)
+    assert "Прем'єр" in text and "&#x27;" not in text
+
+
+def test_empty_fallback_model_env_means_none(monkeypatch):
+    from core.config import Settings
+
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
+    s = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
+    assert s.gemini_fallback_model is None
