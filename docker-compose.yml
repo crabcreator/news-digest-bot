@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    image: news-digest-bot:latest
+    container_name: news-digest-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Always keep the database on the mounted volume, regardless of the .env value.
+      DATABASE_URL: sqlite+aiosqlite:///./data/news_bot.db
+    volumes:
+      - bot_data:/app/data
+
+volumes:
+  bot_data:
