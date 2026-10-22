@@ -1,0 +1,11 @@
+aiogram>=3.13,<4
+aiohttp>=3.10
+feedparser>=6.0
+trafilatura>=1.12
+defusedxml>=0.7
+SQLAlchemy[asyncio]>=2.0.30
+aiosqlite>=0.20
+google-genai>=1.0
+APScheduler>=3.10,<4
+pydantic-settings>=2.4
+tzdata>=2024.1
