@@ -230,3 +230,64 @@ def test_empty_fallback_model_env_means_none(monkeypatch):
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
     s = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
     assert s.gemini_fallback_model is None
+
+
+# ------------------------------------------------------------------ extractive fallback
+
+
+def test_fallback_topics_are_diverse_and_deduplicated():
+    from services.summarizer.fallback import build_fallback_topics
+
+    items = [
+        item(1, "war", title="Росія атакувала Київ ракетами вночі", summary="Деталі атаки."),
+        item(2, "war", title="Росія атакувала Київ ракетами цієї ночі", summary="Інші деталі."),  # near-duplicate
+        item(3, "war", title="ЗСУ звільнили село на Харківщині", summary="Село звільнено."),
+        item(4, "war", title="Третя воєнна новина про щось інше", summary="Ще."),
+        item(5, "economy", title="НБУ залишив облікову ставку", summary="Ставка 15%."),
+        item(6, None, title="Без категорії"),
+    ]
+    topics = build_fallback_topics(items, ALL)
+    ids = [t.source_id for t in topics]
+    assert 2 not in ids and 6 not in ids  # duplicate and uncategorised skipped
+    assert ids.count(4) == 0  # max 2 per category
+    assert {1, 3, 5} == set(ids)
+    assert all(t.summary for t in topics)
+
+
+def test_fallback_respects_category_filter_and_renders_notice():
+    from services.summarizer.fallback import FALLBACK_NOTICE, build_fallback_topics
+
+    items = [item(1, "war", title="Новина війни"), item(2, "culture", title="Новина культури")]
+    topics = build_fallback_topics(items, ["culture"])
+    assert [t.source_id for t in topics] == [2]
+    text = render_digest(topics, items, ["culture"], D, notice=FALLBACK_NOTICE)
+    assert "⚠️ ШІ-підсумок" in text and "Новина культури" in text and "Новина війни" not in text
+
+
+async def test_service_serves_fallback_when_gemini_fails_and_does_not_cache(session):
+    await seed(session)
+
+    class Failing:
+        calls = 0
+
+        async def generate_topics(self, *a):
+            Failing.calls += 1
+            raise SummarizationError("503")
+
+    r1 = await get_or_generate_digest(session, Failing(), ALL, "now")
+    r2 = await get_or_generate_digest(session, Failing(), ALL, "now")
+    assert "ШІ-підсумок тимчасово недоступний" in r1.text and r1.digest_id is None
+    assert Failing.calls == 2  # not cached: every request retries Gemini
+
+
+async def test_service_raises_when_fallback_has_nothing(session):
+    await crud.add_news_items(
+        session, [crud.NewsItemData("https://e.com/u", "T", "Src", utcnow() - timedelta(hours=1), None, "x")]
+    )
+
+    class Failing:
+        async def generate_topics(self, *a):
+            raise SummarizationError("503")
+
+    with pytest.raises(SummarizationError):
+        await get_or_generate_digest(session, Failing(), ALL, "now")
