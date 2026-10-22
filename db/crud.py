@@ -206,6 +206,27 @@ async def get_digest(
     return await session.scalar(stmt)
 
 
+async def get_fresh_digest(
+    session: AsyncSession,
+    target_date: date,
+    category_group: str,
+    max_age: timedelta,
+    now: datetime | None = None,
+) -> Digest | None:
+    """Latest cached digest for the key that was generated no longer than `max_age` ago."""
+    stmt = (
+        select(Digest)
+        .where(
+            Digest.target_date == target_date,
+            Digest.category_group == category_group,
+            Digest.created_at >= (now or utcnow()) - max_age,
+        )
+        .order_by(Digest.id.desc())
+        .limit(1)
+    )
+    return await session.scalar(stmt)
+
+
 async def save_digest(
     session: AsyncSession, target_date: date, content: str, category_group: str = "all"
 ) -> Digest:
