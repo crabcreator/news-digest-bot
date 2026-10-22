@@ -127,4 +127,7 @@ async def test_scheduler_has_both_jobs():
 
     settings = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
     scheduler = create_scheduler(settings, MagicMock(), MagicMock(), MagicMock())
-    assert {j.id for j in scheduler.get_jobs()} == {"fetch_rss", "send_digests"}
+    jobs_by_id = {j.id: j for j in scheduler.get_jobs()}
+    assert set(jobs_by_id) == {"fetch_rss", "send_digests"}
+    # Regression: the startup fetch was skipped as "missed" when bot startup took >1s.
+    assert jobs_by_id["fetch_rss"].misfire_grace_time >= 60
