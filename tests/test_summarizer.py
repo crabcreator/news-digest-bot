@@ -1,0 +1,202 @@
+import asyncio
+import json
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
+
+import pytest
+from google.genai import errors as genai_errors
+
+from db import crud
+from db.models import NewsItem, utcnow
+from services.summarizer.digest_service import get_or_generate_digest
+from services.summarizer.formatter import DIVIDER, FOOTER, render_digest, render_empty_digest, split_message
+from services.summarizer.gemini_client import GeminiSummarizer, SummarizationError, Topic
+from services.summarizer.prompts import format_item
+
+ALL = ["politics", "war", "economy", "technology", "culture", "society"]
+D = date(2026, 10, 22)
+
+
+def item(id_, category="war", url=None, source="Суспільне", title="Заголовок", summary="Текст"):
+    return NewsItem(id=id_, url=url or f"https://example.com/{id_}", url_hash=str(id_), title=title,
+                    source=source, category=category, summary=summary, published_at=utcnow())
+
+
+# ------------------------------------------------------------------ formatter
+
+
+def test_render_matches_template_and_escapes():
+    items = [item(1, source="A&B", url='https://e.com/a?x=1&y="2"'), item(2, "economy")]
+    topics = [
+        Topic(category="war", headline="Удар <script>", summary="Перше. Друге.", source_id=1),
+        Topic(category="economy", headline="Курс", summary="НБУ тримає курс.", source_id=2),
+    ]
+    text = render_digest(topics, items, ALL, D)
+    assert text.startswith("📰 <b>Головне за день</b> | 22.10.2026\n⏱ Час читання: ~1 хв")
+    assert "🪖 <b>Війна та фронт</b>\n• <b>Удар &lt;script&gt;</b>\nПерше. Друге." in text
+    assert '🔗 Джерело: <a href="https://e.com/a?x=1&amp;y=&quot;2&quot;">A&amp;B</a>' in text
+    assert text.index("Війна") < text.index("Економіка")  # canonical category order
+    assert text.endswith(f"{DIVIDER}\n\n{FOOTER}")
+    assert "<script>" not in text
+
+
+def test_render_drops_invalid_topics():
+    items = [item(1, "war"), item(2, "culture")]
+    topics = [
+        Topic(category="war", headline="Ok", summary="s", source_id=1),
+        Topic(category="war", headline="Dup source", summary="s", source_id=1),
+        Topic(category="war", headline="Hallucinated", summary="s", source_id=999),
+        Topic(category="culture", headline="Not allowed", summary="s", source_id=2),
+        Topic(category="bogus", headline="Fallback to item category", summary="s", source_id=2),
+    ]
+    text = render_digest(topics, items, ["war"], D)
+    assert "Ok" in text and "Dup source" not in text and "Hallucinated" not in text
+    assert "Not allowed" not in text and "Fallback" not in text
+    assert render_digest([], items, ALL, D) is None
+
+
+def test_render_trims_to_budget():
+    items = [item(i, "war") for i in range(1, 8)]
+    topics = [Topic(category="war", headline=f"H{i}", summary="слово " * 100, source_id=i) for i in range(1, 8)]
+    text = render_digest(topics, items, ALL, D, max_chars=3800)
+    assert len(text) <= 3800 and "H1" in text and "H7" not in text
+
+
+def test_empty_digest_notice():
+    text = render_empty_digest(D, "за добу")
+    assert "за добу" in text and FOOTER in text and "<a" not in text
+
+
+def test_split_message_at_dividers_and_tag_safe():
+    sections = [f"🪖 <b>Cat{i}</b>\n• <b>H</b>\n" + ("слово " * 150) for i in range(6)]
+    text = f"\n\n{DIVIDER}\n\n".join(sections)
+    chunks = split_message(text, limit=1500)
+    assert len(chunks) > 1 and all(len(c) <= 1500 for c in chunks)
+    for c in chunks:
+        assert c.count("<b>") == c.count("</b>")
+    assert split_message("short") == ["short"]
+
+
+def test_split_message_handles_oversized_line():
+    chunks = split_message("слово " * 1000, limit=500)
+    assert all(len(c) <= 500 for c in chunks) and len(chunks) > 1
+
+
+def test_prompt_item_format():
+    line = format_item(item(7, None, title="T", summary="x " * 300))
+    assert line.startswith("[7 | Суспільне | ? | T | ") and len(line) < 300
+
+
+# ------------------------------------------------------------------ gemini client
+
+
+class FakeModels:
+    def __init__(self, outcomes):
+        self.outcomes, self.calls = list(outcomes), 0
+
+    async def generate_content(self, **kwargs):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return SimpleNamespace(text=outcome)
+
+
+def make_summarizer(outcomes):
+    models = FakeModels(outcomes)
+    client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    return GeminiSummarizer("k", client=client, backoff_base_seconds=0, max_attempts=3, timeout_seconds=5), models
+
+
+GOOD = json.dumps({"topics": [{"category": "war", "headline": "H", "summary": "S", "source_id": 1}]})
+
+
+async def test_gemini_retries_transient_errors():
+    s, models = make_summarizer([genai_errors.ServerError(503, {"error": {"message": "overloaded"}}), "not json", GOOD])
+    topics = await s.generate_topics([item(1)], ALL, 24)
+    assert models.calls == 3 and topics[0].source_id == 1
+
+
+async def test_gemini_gives_up_after_max_attempts():
+    err = genai_errors.ClientError(429, {"error": {"message": "quota"}})
+    s, models = make_summarizer([err, err, err])
+    with pytest.raises(SummarizationError):
+        await s.generate_topics([item(1)], ALL, 24)
+    assert models.calls == 3
+
+
+async def test_gemini_does_not_retry_client_errors():
+    s, models = make_summarizer([genai_errors.ClientError(400, {"error": {"message": "bad"}})])
+    with pytest.raises(SummarizationError):
+        await s.generate_topics([item(1)], ALL, 24)
+    assert models.calls == 1
+
+
+async def test_gemini_timeout_is_retried():
+    s, models = make_summarizer([asyncio.TimeoutError(), GOOD])
+    assert len(await s.generate_topics([item(1)], ALL, 24)) == 1
+
+
+async def test_gemini_skips_call_without_items():
+    s, models = make_summarizer([])
+    assert await s.generate_topics([], ALL, 24) == []
+    assert models.calls == 0
+
+
+# ------------------------------------------------------------------ digest service
+
+
+class FakeSummarizer:
+    def __init__(self):
+        self.calls = 0
+
+    async def generate_topics(self, items, categories, window_hours):
+        self.calls += 1
+        return [Topic(category="war", headline="H", summary="S", source_id=items[0].id)]
+
+
+async def seed(session, hours_ago=1):
+    now = utcnow()
+    await crud.add_news_items(session, [crud.NewsItemData("https://e.com/1", "T", "Src", now - timedelta(hours=hours_ago), "war", "x")])
+
+
+async def test_service_generates_then_serves_cache(session):
+    await seed(session)
+    fake = FakeSummarizer()
+    r1 = await get_or_generate_digest(session, fake, ALL, "daily")
+    r2 = await get_or_generate_digest(session, fake, ALL, "daily")
+    assert fake.calls == 1 and not r1.from_cache and r2.from_cache
+    assert r1.digest_id == r2.digest_id and "🔗" in r1.text
+
+
+async def test_service_now_uses_short_window_and_separate_cache(session):
+    await seed(session, hours_ago=10)
+    fake = FakeSummarizer()
+    now_result = await get_or_generate_digest(session, fake, ALL, "now")
+    assert fake.calls == 0 and now_result.digest_id is None and "<a" not in now_result.text  # nothing in last 4h
+    daily = await get_or_generate_digest(session, fake, ALL, "daily")
+    assert daily.digest_id is not None and fake.calls == 1
+
+
+async def test_service_separate_cache_per_category_group(session):
+    await seed(session)
+    fake = FakeSummarizer()
+    await get_or_generate_digest(session, fake, ALL, "daily")
+    await get_or_generate_digest(session, fake, ["war", "politics"], "daily")
+    assert fake.calls == 2
+
+
+async def test_service_expired_cache_regenerates(session):
+    await seed(session)
+    fake = FakeSummarizer()
+    await get_or_generate_digest(session, fake, ALL, "daily")
+    later = utcnow() + timedelta(minutes=61)
+    r = await get_or_generate_digest(session, fake, ALL, "daily", now_utc=later)
+    # news is 1h old at seed time, still inside the 24h window at +61min
+    assert fake.calls == 2 and not r.from_cache
+
+
+async def test_service_no_categories_returns_notice(session):
+    fake = FakeSummarizer()
+    r = await get_or_generate_digest(session, fake, [], "daily")
+    assert r.digest_id is None and fake.calls == 0
