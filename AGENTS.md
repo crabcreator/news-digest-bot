@@ -312,3 +312,16 @@ The AI summarizer must format the final Telegram post following this exact visua
    * Do NOT attempt to fetch RSS feeds on-demand right before digest delivery.  
    * Ukrainian media RSS feeds maintain a shallow rolling window (typically only the latest 15 to 30 articles). Polling once in the evening would lose all morning and afternoon news.  
    * The background scheduler MUST continuously ingest feeds every 30-60 minutes into the SQLite database. The summarizer then queries the database for the relevant 24-hour window.
+
+---
+
+# **9\. Git and Commit Guidelines**
+
+Full rules live in [CONTRIBUTING.md](CONTRIBUTING.md). Key points every agent MUST follow:
+
+* **Never commit directly to `main`.** Work in `feature/*`, `fix/*`, `docs/*` etc. branches; changes reach `main` via pull request (fast-forward or squash).
+* **Rebase instead of merge** to update branches; keep history linear.
+* **Never force-push to `main`**; on own branches use only `--force-with-lease`.
+* **Atomic commits** with [Conventional Commits](https://www.conventionalcommits.org/) messages: English, imperative mood, subject up to 72 characters.
+* **Tests must pass** (`pytest`) before every commit and push.
+* **Never commit secrets** (`.env`, keys, tokens) or database files (`*.db*`, `data/`).
