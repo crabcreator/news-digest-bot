@@ -117,6 +117,15 @@ class NewsItemData:
     summary: str | None = None
 
 
+async def get_existing_urls(session: AsyncSession, urls: Sequence[str]) -> set[str]:
+    """Subset of `urls` that are already stored (queried in chunks to respect SQLite variable limits)."""
+    found: set[str] = set()
+    for i in range(0, len(urls), 500):
+        chunk = list(urls[i : i + 500])
+        found.update((await session.scalars(select(NewsItem.url).where(NewsItem.url.in_(chunk)))).all())
+    return found
+
+
 async def add_news_items(session: AsyncSession, items: Iterable[NewsItemData]) -> int:
     """Insert items with ON CONFLICT DO NOTHING on the unique constraints. Returns inserted count."""
     inserted = 0
