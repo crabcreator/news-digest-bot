@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from db import crud
 from db.models import User, utcnow
+from healthcheck import touch_heartbeat
 from services.delivery import deliver_digest
 from services.fetcher.rss_client import DEFAULT_FEEDS, FeedSource, ingest_feeds
 from services.summarizer.digest_service import cache_key, get_or_generate_digest
@@ -72,6 +73,7 @@ async def check_and_send_scheduled_digests(
 
     Returns the number of successfully delivered digests.
     """
+    touch_heartbeat()
     now_utc = now_utc or utcnow()
     try:
         async with session_factory() as db:
