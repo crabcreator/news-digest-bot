@@ -48,7 +48,9 @@ async def test_settings_keyboard_marks_selection(session):
     labels = [b.text for row in kb.inline_keyboard for b in row]
     assert "✅ 21:00" in labels and "13:00" in labels
     assert any(l.startswith("▫️") and "Культура" in l for l in labels)
-    assert sum(1 for l in labels if l.startswith("✅") and "21:00" not in l) == 5
+    assert any("Наука" in l for l in labels)
+    assert any("Шоу-бізнес" in l for l in labels)
+    assert sum(1 for l in labels if l.startswith("✅") and "21:00" not in l) == 7
     assert any("Вимкнути" in l for l in labels)
     # callback data must fit Telegram's 64-byte limit
     assert all(len(b.callback_data.encode()) <= 64 for row in kb.inline_keyboard for b in row)

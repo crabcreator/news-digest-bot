@@ -15,7 +15,9 @@ CATEGORIES: tuple[Category, ...] = (
     Category("war", "Війна та фронт", "🪖"),
     Category("economy", "Економіка", "💰"),
     Category("technology", "Технології", "💻"),
+    Category("science", "Наука", "🔬"),
     Category("culture", "Культура", "🎭"),
+    Category("showbiz", "Шоу-бізнес", "🌟"),
     Category("society", "Суспільство", "👥"),
 )
 

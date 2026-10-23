@@ -8,10 +8,10 @@ async def test_user_defaults_and_categories(session):
     user = await crud.get_or_create_user(session, 1, "nick", "Nikita")
     assert user.delivery_hour == 21 and user.delivery_minute == 0
     assert user.timezone == "Europe/Kyiv"
-    assert len(user.category_list) == 6 and user.categories == "all"
+    assert len(user.category_list) == 8 and user.categories == "all"
 
     user = await crud.toggle_category(session, 1, "culture")
-    assert "culture" not in user.category_list and len(user.category_list) == 5
+    assert "culture" not in user.category_list and len(user.category_list) == 7
     user = await crud.toggle_category(session, 1, "culture")
     assert user.categories == "all"
 

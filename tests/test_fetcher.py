@@ -63,8 +63,12 @@ async def test_fetch_article_text_respects_max_bytes():
 def test_categorizer():
     assert infer_category("ЗСУ відбили наступ, обстріл Харкова") == "war"
     assert infer_category("НБУ знизив облікову ставку, інфляція сповільнилась") == "economy"
+    assert infer_category("Вчені NASA зробили відкриття про галактики") == "science"
+    assert infer_category("Зірки Голлівуду та скандал на весіллі") == "showbiz"
     assert infer_category("Щось нейтральне") is None
     assert infer_category("x", tags=["Культура"]) == "culture"
+    assert infer_category("x", tags=["Наука"]) == "science"
+    assert infer_category("x", tags=["Шоубіз"]) == "showbiz"
 
 
 async def test_ingest_feeds_dedups(session, monkeypatch):
