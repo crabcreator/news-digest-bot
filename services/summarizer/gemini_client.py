@@ -56,13 +56,17 @@ class GeminiSummarizer:
         self._backoff_base = backoff_base_seconds
 
     async def generate_topics(
-        self, items: Sequence[NewsItem], categories: Sequence[str], window_hours: int
+        self,
+        items: Sequence[NewsItem],
+        categories: Sequence[str],
+        window_hours: int,
+        tech_subcategories: Sequence[str] | None = None,
     ) -> list[Topic]:
         """Cluster and summarize `items`. Retries transient failures up to `max_attempts` times."""
         if not items:
             return []
 
-        prompt = build_user_prompt(items, categories, window_hours)
+        prompt = build_user_prompt(items, categories, window_hours, tech_subcategories=tech_subcategories)
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             response_mime_type="application/json",

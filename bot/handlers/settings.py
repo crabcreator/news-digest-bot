@@ -14,14 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.keyboards.inline import (
     ActionCB,
     CategoryCB,
+    TechSubcategoryCB,
     TimeCB,
     TimezoneCB,
     settings_keyboard,
+    tech_subcategories_keyboard,
     timezone_keyboard,
 )
 from bot.keyboards.reply import BTN_NOW, BTN_SETTINGS, main_menu
 from bot.utils import ensure_user
-from core.categories import CATEGORY_BY_KEY
+from core.categories import CATEGORY_BY_KEY, TECH_SUBCATEGORY_BY_KEY
 from core.config import Settings
 from db import crud
 from db.models import User
@@ -141,6 +143,41 @@ async def on_back_to_settings(callback: CallbackQuery, session: AsyncSession, se
     await _refresh(callback, user)
 
 
+async def on_tech_subcategories_menu(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        text = (
+            "💻 <b>Галузі технологій</b>\n\n"
+            "Оберіть напрями, які мають входити до вашого дайджесту новин:"
+        )
+        try:
+            await callback.message.edit_text(text, reply_markup=tech_subcategories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
+async def on_tech_subcategory_toggled(
+    callback: CallbackQuery, callback_data: TechSubcategoryCB, session: AsyncSession, settings: Settings
+) -> None:
+    if callback_data.key not in TECH_SUBCATEGORY_BY_KEY:
+        await callback.answer()
+        return
+    user = await ensure_user(session, callback.from_user, settings)
+    if user.tech_subcategory_list == [callback_data.key]:
+        await callback.answer("Потрібна хоча б одна галузь", show_alert=True)
+        return
+    user = await crud.toggle_tech_subcategory(session, user.id, callback_data.key)
+    await callback.answer()
+    if user and isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_reply_markup(reply_markup=tech_subcategories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
 async def on_custom_time(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SettingsStates.waiting_time)
     await callback.answer()
@@ -174,6 +211,8 @@ def create_router() -> Router:
     router.callback_query.register(on_pick_timezone, ActionCB.filter(F.name == "pick_timezone"))
     router.callback_query.register(on_back_to_settings, ActionCB.filter(F.name == "back_to_settings"))
     router.callback_query.register(on_timezone_selected, TimezoneCB.filter())
+    router.callback_query.register(on_tech_subcategories_menu, ActionCB.filter(F.name == "tech_subcategories"))
+    router.callback_query.register(on_tech_subcategory_toggled, TechSubcategoryCB.filter())
     router.callback_query.register(on_custom_time, ActionCB.filter(F.name == "custom_time"))
     # Free-text time input; commands and menu buttons fall through to their own handlers.
     router.message.register(

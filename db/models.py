@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.categories import ALL_CATEGORY_KEYS
+from core.categories import ALL_CATEGORY_KEYS, TECH_SUBCATEGORY_KEYS
 from core.database import Base
 
 
@@ -26,6 +26,7 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(String, default="Europe/Kyiv", server_default="Europe/Kyiv")
     # JSON list of category keys, or the literal "all"
     categories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
+    tech_subcategories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
@@ -44,6 +45,22 @@ class User(Base):
     def category_list(self, value: list[str]) -> None:
         selected = [c for c in ALL_CATEGORY_KEYS if c in value]
         self.categories = "all" if len(selected) == len(ALL_CATEGORY_KEYS) else json.dumps(selected)
+
+    @property
+    def tech_subcategory_list(self) -> list[str]:
+        raw = (self.tech_subcategories or "all").strip()
+        if raw == "all":
+            return list(TECH_SUBCATEGORY_KEYS)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = [part.strip() for part in raw.split(",")]
+        return [c for c in TECH_SUBCATEGORY_KEYS if c in parsed]
+
+    @tech_subcategory_list.setter
+    def tech_subcategory_list(self, value: list[str]) -> None:
+        selected = [c for c in TECH_SUBCATEGORY_KEYS if c in value]
+        self.tech_subcategories = "all" if len(selected) == len(TECH_SUBCATEGORY_KEYS) else json.dumps(selected)
 
 
 class NewsItem(Base):

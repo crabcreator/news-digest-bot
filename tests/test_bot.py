@@ -12,9 +12,11 @@ from bot.handlers.digest import cmd_now
 from bot.keyboards.inline import (
     ActionCB,
     CategoryCB,
+    TechSubcategoryCB,
     TimeCB,
     TimezoneCB,
     settings_keyboard,
+    tech_subcategories_keyboard,
     timezone_keyboard,
 )
 from core.config import Settings
@@ -103,6 +105,60 @@ async def test_timezone_keyboard_and_callbacks(session):
     msg.edit_text.reset_mock()
     await settings_handlers.on_back_to_settings(callback, session, make_settings())
     msg.edit_text.assert_awaited_once()
+
+
+async def test_tech_subcategories_keyboard_and_callbacks(session):
+    user = await crud.get_or_create_user(session, 1)
+
+    # settings_keyboard shows tech subcategories button when technology is active
+    kb = settings_keyboard(user)
+    labels = [b.text for row in kb.inline_keyboard for b in row]
+    assert any("Галузі технологій" in l for l in labels)
+
+    # Disable technology category -> button disappears
+    await crud.toggle_category(session, 1, "technology")
+    await session.refresh(user)
+    kb = settings_keyboard(user)
+    labels = [b.text for row in kb.inline_keyboard for b in row]
+    assert not any("Галузі технологій" in l for l in labels)
+
+    # Re-enable technology
+    await crud.toggle_category(session, 1, "technology")
+    await session.refresh(user)
+
+    # tech_subcategories_keyboard
+    tkb = tech_subcategories_keyboard(user)
+    tlabels = [b.text for row in tkb.inline_keyboard for b in row]
+    assert any("Штучний інтелект" in l for l in tlabels)
+    assert any("Кібербезпека" in l for l in tlabels)
+    assert all(len(b.callback_data.encode()) <= 64 for row in tkb.inline_keyboard for b in row)
+
+    # on_tech_subcategories_menu
+    msg = MagicMock(spec=Message, edit_text=AsyncMock())
+    callback = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(), message=msg)
+    await settings_handlers.on_tech_subcategories_menu(callback, session, make_settings())
+    msg.edit_text.assert_awaited_once()
+    assert "галузі технологій" in msg.edit_text.await_args.args[0].lower()
+
+    # on_tech_subcategory_toggled
+    msg.edit_reply_markup = AsyncMock()
+    await settings_handlers.on_tech_subcategory_toggled(
+        callback, TechSubcategoryCB(key="ai"), session, make_settings()
+    )
+    user = await crud.get_user(session, 1)
+    assert "ai" not in user.tech_subcategory_list
+    msg.edit_reply_markup.assert_awaited_once()
+
+    # cannot disable last tech subcategory
+    user.tech_subcategory_list = ["cybersec"]
+    await session.commit()
+    callback.answer.reset_mock()
+    await settings_handlers.on_tech_subcategory_toggled(
+        callback, TechSubcategoryCB(key="cybersec"), session, make_settings()
+    )
+    assert callback.answer.await_args.kwargs.get("show_alert") is True
+    await session.refresh(user)
+    assert user.tech_subcategory_list == ["cybersec"]
 
 
 # ------------------------------------------------------------------ delivery

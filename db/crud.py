@@ -32,6 +32,7 @@ async def get_or_create_user(
     delivery_hour: int = 21,
     delivery_minute: int = 0,
     timezone: str = "Europe/Kyiv",
+    tech_subcategories: str = "all",
     reactivate: bool = False,
 ) -> User:
     """Return the user, creating it if needed and refreshing the profile.
@@ -48,6 +49,7 @@ async def get_or_create_user(
             delivery_minute=delivery_minute,
             timezone=timezone,
             categories="all",
+            tech_subcategories=tech_subcategories,
             is_active=True,
         )
         session.add(user)
@@ -78,6 +80,22 @@ async def toggle_category(session: AsyncSession, user_id: int, category: str) ->
     selected.symmetric_difference_update({category})
     user.category_list = list(selected)
     await session.commit()
+    return user
+
+
+async def toggle_tech_subcategory(session: AsyncSession, user_id: int, subcategory: str) -> User | None:
+    from core.categories import TECH_SUBCATEGORY_KEYS
+
+    if subcategory not in TECH_SUBCATEGORY_KEYS:
+        return None
+    user = await session.get(User, user_id)
+    if user is None:
+        return None
+    selected = set(user.tech_subcategory_list)
+    selected.symmetric_difference_update({subcategory})
+    user.tech_subcategory_list = list(selected)
+    await session.commit()
+    await session.refresh(user)
     return user
 
 

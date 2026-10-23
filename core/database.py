@@ -43,10 +43,23 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
+def _migrate_sqlite_schema(connection) -> None:  # noqa: ANN001
+    """Lightweight schema migration for existing SQLite databases."""
+    try:
+        rows = connection.exec_driver_sql("PRAGMA table_info(users);").fetchall()
+        cols = {row[1] for row in rows}
+        if cols and "tech_subcategories" not in cols:
+            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN tech_subcategories TEXT DEFAULT 'all';")
+    except Exception:
+        logger.exception("Schema migration check failed")
+
+
 async def init_db(engine: AsyncEngine) -> None:
     """Create all tables (idempotent)."""
     from db import models  # noqa: F401  (register models on Base.metadata)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if engine.url.get_backend_name() == "sqlite":
+            await conn.run_sync(_migrate_sqlite_schema)
     logger.info("Database initialised")

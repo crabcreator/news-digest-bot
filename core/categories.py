@@ -4,10 +4,29 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class Subcategory:
+    key: str
+    title: str
+    emoji: str
+
+
+@dataclass(frozen=True)
 class Category:
     key: str
     title: str
     emoji: str
+
+
+TECH_SUBCATEGORIES: tuple[Subcategory, ...] = (
+    Subcategory("ai", "Штучний інтелект (AI)", "🤖"),
+    Subcategory("cybersec", "Кібербезпека", "🛡"),
+    Subcategory("gadgets", "Гаджети та залізо", "📱"),
+    Subcategory("business", "IT-бізнес та стартапи", "💼"),
+    Subcategory("software", "Софт та розробка", "👨‍💻"),
+)
+
+TECH_SUBCATEGORY_KEYS: tuple[str, ...] = tuple(s.key for s in TECH_SUBCATEGORIES)
+TECH_SUBCATEGORY_BY_KEY: dict[str, Subcategory] = {s.key: s for s in TECH_SUBCATEGORIES}
 
 
 CATEGORIES: tuple[Category, ...] = (

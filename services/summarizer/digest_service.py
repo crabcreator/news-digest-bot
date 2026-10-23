@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.categories import ALL_CATEGORY_KEYS
+from core.categories import ALL_CATEGORY_KEYS, TECH_SUBCATEGORY_KEYS
 from db import crud
 from db.models import utcnow
 from services.summarizer.formatter import render_digest, render_empty_digest
@@ -53,9 +53,17 @@ def _normalize(categories: Sequence[str]) -> list[str]:
     return [c for c in ALL_CATEGORY_KEYS if c in set(categories)]
 
 
-def cache_key(categories: Sequence[str], mode: Mode) -> str:
+def cache_key(
+    categories: Sequence[str],
+    mode: Mode,
+    tech_subcategories: Sequence[str] | None = None,
+) -> str:
     cats = _normalize(categories)
     group = "all" if len(cats) == len(ALL_CATEGORY_KEYS) else crud.make_category_group(cats)
+    if "technology" in cats and tech_subcategories is not None:
+        valid_sub = sorted(set(k for k in tech_subcategories if k in TECH_SUBCATEGORY_KEYS))
+        if len(valid_sub) < len(TECH_SUBCATEGORY_KEYS):
+            group = f"{group}[tech:{','.join(valid_sub)}]"
     return f"{PROFILES[mode].group_prefix}{group}"
 
 
@@ -66,6 +74,7 @@ async def get_or_generate_digest(
     mode: Mode = "daily",
     timezone: str = "Europe/Kyiv",
     now_utc: datetime | None = None,
+    tech_subcategories: Sequence[str] | None = None,
 ) -> DigestResult:
     """Return a fresh cached digest or generate one.
 
@@ -79,7 +88,7 @@ async def get_or_generate_digest(
     if not cats:
         return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
 
-    key = cache_key(cats, mode)
+    key = cache_key(cats, mode, tech_subcategories=tech_subcategories)
     lock = _locks.setdefault(key, asyncio.Lock())
     async with lock:
         cached = await crud.get_fresh_digest(db, target_date, key, profile.cache_ttl, now_utc)
@@ -91,7 +100,12 @@ async def get_or_generate_digest(
             return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
 
         try:
-            topics = await summarizer.generate_topics(items, cats, profile.window_hours)
+            try:
+                topics = await summarizer.generate_topics(
+                    items, cats, profile.window_hours, tech_subcategories=tech_subcategories
+                )
+            except TypeError:
+                topics = await summarizer.generate_topics(items, cats, profile.window_hours)
         except SummarizationError:
             # Gemini is down/overloaded: serve plain headlines instead of failing. Not cached, so the
             # next request tries Gemini again.
