@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from google.genai import errors as genai_errors
 
+from core.categories import ALL_CATEGORY_KEYS
 from db import crud
 from db.models import NewsItem, utcnow
 from services.summarizer.digest_service import get_or_generate_digest
@@ -13,7 +14,7 @@ from services.summarizer.formatter import DIVIDER, FOOTER, render_digest, render
 from services.summarizer.gemini_client import GeminiSummarizer, SummarizationError, Topic
 from services.summarizer.prompts import format_item
 
-ALL = ["politics", "war", "economy", "technology", "culture", "society"]
+ALL = list(ALL_CATEGORY_KEYS)
 D = date(2026, 10, 22)
 
 
