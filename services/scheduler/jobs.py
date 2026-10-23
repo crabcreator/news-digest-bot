@@ -87,10 +87,11 @@ async def check_and_send_scheduled_digests(
 
     logger.info("Delivering scheduled digests to %d user(s)", len(due))
 
-    # Users with identical categories (and timezone) share one digest -> one Gemini call.
+    # Users with identical categories (and tech subcategories, and timezone) share one digest -> one Gemini call.
     groups: dict[tuple[str, str], list[User]] = defaultdict(list)
     for user in due:
-        groups[(cache_key(user.category_list, "daily"), user.timezone)].append(user)
+        key = cache_key(user.category_list, "daily", tech_subcategories=user.tech_subcategory_list)
+        groups[(key, user.timezone)].append(user)
 
     semaphore = asyncio.Semaphore(DELIVERY_CONCURRENCY)
     delivered = 0
@@ -108,7 +109,13 @@ async def check_and_send_scheduled_digests(
         try:
             async with session_factory() as db:
                 result = await get_or_generate_digest(
-                    db, summarizer, users[0].category_list, "daily", timezone, now_utc
+                    db,
+                    summarizer,
+                    users[0].category_list,
+                    "daily",
+                    timezone,
+                    now_utc,
+                    tech_subcategories=users[0].tech_subcategory_list,
                 )
         except SummarizationError:
             logger.exception("Digest generation failed; %d user(s) skipped", len(users))

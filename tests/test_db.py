@@ -141,3 +141,22 @@ async def test_get_system_stats(session):
     assert stats.total_digests == 1
     assert stats.deliveries_last_24h == 1
 
+
+async def test_tech_subcategories_crud(session):
+    user = await crud.get_or_create_user(session, 201)
+    assert user.tech_subcategories == "all"
+    assert len(user.tech_subcategory_list) == 5
+
+    # Toggle one subcategory off
+    user = await crud.toggle_tech_subcategory(session, 201, "ai")
+    assert "ai" not in user.tech_subcategory_list
+    assert len(user.tech_subcategory_list) == 4
+
+    # Toggle it back on -> resets to "all"
+    user = await crud.toggle_tech_subcategory(session, 201, "ai")
+    assert user.tech_subcategories == "all"
+    assert "ai" in user.tech_subcategory_list
+
+    # Invalid subcategory
+    assert await crud.toggle_tech_subcategory(session, 201, "invalid_sub") is None
+

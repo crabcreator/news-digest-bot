@@ -4,7 +4,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from core.categories import CATEGORIES
+from core.categories import CATEGORIES, TECH_SUBCATEGORIES
 from db.models import User
 
 # Quick-pick delivery times (hour, minute).
@@ -30,11 +30,15 @@ class CategoryCB(CallbackData, prefix="c"):
 
 
 class ActionCB(CallbackData, prefix="a"):
-    name: str  # "toggle_active" | "custom_time" | "pick_timezone" | "back_to_settings"
+    name: str  # "toggle_active" | "custom_time" | "pick_timezone" | "back_to_settings" | "tech_subcategories"
 
 
 class TimezoneCB(CallbackData, prefix="tz"):
     name: str
+
+
+class TechSubcategoryCB(CallbackData, prefix="ts"):
+    key: str
 
 
 def settings_keyboard(user: User) -> InlineKeyboardMarkup:
@@ -60,6 +64,17 @@ def settings_keyboard(user: User) -> InlineKeyboardMarkup:
     cats.adjust(2)
     builder.attach(cats)
 
+    if "technology" in selected_categories:
+        tech_btn = InlineKeyboardBuilder()
+        sub_count = len(user.tech_subcategory_list)
+        total_count = len(TECH_SUBCATEGORIES)
+        suffix = "всі" if sub_count == total_count else f"{sub_count}/{total_count}"
+        tech_btn.button(
+            text=f"⚙️ Галузі технологій ({suffix})",
+            callback_data=ActionCB(name="tech_subcategories"),
+        )
+        builder.attach(tech_btn)
+
     toggle = InlineKeyboardBuilder()
     toggle.button(
         text="🔕 Вимкнути щоденний дайджест" if user.is_active else "🔔 Увімкнути щоденний дайджест",
@@ -75,6 +90,23 @@ def timezone_keyboard(current_timezone: str) -> InlineKeyboardMarkup:
         mark = "✅ " if tz_name == current_timezone else ""
         builder.button(text=f"{mark}{label}", callback_data=TimezoneCB(name=tz_name))
     builder.adjust(2)
+
+    back = InlineKeyboardBuilder()
+    back.button(text="⬅️ Назад до налаштувань", callback_data=ActionCB(name="back_to_settings"))
+    builder.attach(back)
+    return builder.as_markup()
+
+
+def tech_subcategories_keyboard(user: User) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    selected = set(user.tech_subcategory_list)
+    for sub in TECH_SUBCATEGORIES:
+        mark = "✅" if sub.key in selected else "▫️"
+        builder.button(
+            text=f"{mark} {sub.emoji} {sub.title}",
+            callback_data=TechSubcategoryCB(key=sub.key),
+        )
+    builder.adjust(1)
 
     back = InlineKeyboardBuilder()
     back.button(text="⬅️ Назад до налаштувань", callback_data=ActionCB(name="back_to_settings"))

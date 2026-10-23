@@ -298,3 +298,30 @@ async def test_service_raises_when_fallback_has_nothing(session):
 
     with pytest.raises(SummarizationError):
         await get_or_generate_digest(session, Failing(), ALL, "now")
+
+
+def test_build_user_prompt_with_tech_subcategories():
+    from services.summarizer.prompts import build_user_prompt
+
+    items = [item(1, "technology", title="OpenAI реліз", summary="Нова модель")]
+
+    # All subcategories -> no restriction
+    prompt_all = build_user_prompt(items, ["technology"], 24, tech_subcategories=None)
+    assert 'For the "technology" category, only include events' not in prompt_all
+
+    # Subset of subcategories -> restriction added
+    prompt_sub = build_user_prompt(items, ["technology"], 24, tech_subcategories=["ai", "cybersec"])
+    assert 'For the "technology" category, only include events from these specific fields: ai (Штучний інтелект (AI)), cybersec (Кібербезпека)' in prompt_sub
+
+
+def test_cache_key_with_tech_subcategories():
+    from services.summarizer.digest_service import cache_key
+
+    # all categories and default tech subcategories -> standard key
+    k1 = cache_key(ALL, "daily", tech_subcategories=None)
+    assert k1 == "all"
+    assert "[tech:" not in k1
+
+    # subset of tech subcategories -> suffixed key
+    k2 = cache_key(ALL, "daily", tech_subcategories=["ai", "cybersec"])
+    assert k2 == "all[tech:ai,cybersec]"

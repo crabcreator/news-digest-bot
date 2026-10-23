@@ -36,7 +36,14 @@ async def cmd_now(
     status_message = await message.answer("⏳ Готую дайджест за останні 4 години…")
     try:
         async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
-            result = await get_or_generate_digest(session, summarizer, user.category_list, "now", user.timezone)
+            result = await get_or_generate_digest(
+                session,
+                summarizer,
+                user.category_list,
+                "now",
+                user.timezone,
+                tech_subcategories=user.tech_subcategory_list,
+            )
     except SummarizationError:
         logger.exception("/now failed for user %s", user.id)
         with suppress(TelegramAPIError):

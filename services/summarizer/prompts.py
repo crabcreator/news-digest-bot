@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from core.categories import CATEGORY_BY_KEY
+from core.categories import CATEGORY_BY_KEY, TECH_SUBCATEGORIES, TECH_SUBCATEGORY_BY_KEY
 from db.models import NewsItem
 
 MAX_TOPICS = 7
@@ -45,12 +45,26 @@ def format_item(item: NewsItem) -> str:
     return f"[{item.id} | {item.source} | {item.category or '?'} | {title} | {summary}]"
 
 
-def build_user_prompt(items: Sequence[NewsItem], categories: Sequence[str], window_hours: int) -> str:
+def build_user_prompt(
+    items: Sequence[NewsItem],
+    categories: Sequence[str],
+    window_hours: int,
+    tech_subcategories: Sequence[str] | None = None,
+) -> str:
     allowed = ", ".join(f"{key} ({CATEGORY_BY_KEY[key].title})" for key in categories if key in CATEGORY_BY_KEY)
     lines = "\n".join(format_item(item) for item in items[:MAX_CONTEXT_ITEMS])
-    return (
+    prompt = (
         f"Time window: last {window_hours} hours.\n"
         f"Allowed categories (use the key before the parentheses): {allowed}\n"
-        f"Only produce topics that belong to the allowed categories.\n\n"
-        f"News items:\n{lines}"
+        f"Only produce topics that belong to the allowed categories.\n"
     )
+    if "technology" in categories and tech_subcategories is not None:
+        valid_sub = [k for k in tech_subcategories if k in TECH_SUBCATEGORY_BY_KEY]
+        if valid_sub and len(valid_sub) < len(TECH_SUBCATEGORIES):
+            sub_titles = ", ".join(f"{k} ({TECH_SUBCATEGORY_BY_KEY[k].title})" for k in valid_sub)
+            prompt += (
+                f'For the "technology" category, only include events from these specific fields: {sub_titles}. '
+                f'Do not include technology events from other fields.\n'
+            )
+    prompt += f"\nNews items:\n{lines}"
+    return prompt
