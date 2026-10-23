@@ -3,8 +3,13 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class FeedConfig(BaseModel):
+    name: str
+    url: str
 
 
 class Settings(BaseSettings):
@@ -27,6 +32,13 @@ class Settings(BaseSettings):
     default_delivery_minute: int = Field(0, ge=0, le=59)
 
     fetch_interval_minutes: int = Field(30, ge=5, le=120)
+    rss_feeds: list[FeedConfig] = Field(
+        default_factory=lambda: [
+            FeedConfig(name="Суспільне", url="https://suspilne.media/rss/all.rss"),
+            FeedConfig(name="BBC Україна", url="https://feeds.bbci.co.uk/ukrainian/rss.xml"),
+            FeedConfig(name="Українська правда", url="https://www.pravda.com.ua/rss/"),
+        ]
+    )
     # Gemini request handling
     gemini_timeout_seconds: int = Field(90, ge=5)
     gemini_max_attempts: int = Field(3, ge=1)
