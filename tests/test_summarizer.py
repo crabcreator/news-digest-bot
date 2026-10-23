@@ -111,6 +111,12 @@ def make_summarizer(outcomes):
 GOOD = json.dumps({"topics": [{"category": "war", "headline": "H", "summary": "S", "source_id": 1}]})
 
 
+def test_gemini_strips_markdown_fences():
+    fenced = f"```json\n{GOOD}\n```"
+    topics = GeminiSummarizer._parse(fenced)
+    assert len(topics) == 1 and topics[0].headline == "H"
+
+
 async def test_gemini_retries_transient_errors():
     s, models = make_summarizer([genai_errors.ServerError(503, {"error": {"message": "overloaded"}}), "not json", GOOD])
     topics = await s.generate_topics([item(1)], ALL, 24)

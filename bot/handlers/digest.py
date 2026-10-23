@@ -1,8 +1,10 @@
 """/now: on-demand digest for the last 4 hours (served from a short-lived cache when available)."""
 
 import logging
+from contextlib import suppress
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,12 +37,19 @@ async def cmd_now(
         result = await get_or_generate_digest(session, summarizer, user.category_list, "now", user.timezone)
     except SummarizationError:
         logger.exception("/now failed for user %s", user.id)
-        await status_message.edit_text("😔 Не вдалося підготувати дайджест. Спробуйте за кілька хвилин.")
+        with suppress(TelegramAPIError):
+            await status_message.edit_text("😔 Не вдалося підготувати дайджест. Спробуйте за кілька хвилин.")
+        return
+    except Exception:
+        logger.exception("Unexpected error during /now for user %s", user.id)
+        with suppress(TelegramAPIError):
+            await status_message.edit_text("😔 Сталася неочікувана помилка. Спробуйте пізніше.")
         return
     finally:
         _in_flight.discard(user.id)
 
-    await status_message.delete()
+    with suppress(TelegramAPIError):
+        await status_message.delete()
     await send_digest_text(bot, user.id, result.text)
 
 

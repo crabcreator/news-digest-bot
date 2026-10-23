@@ -3,7 +3,7 @@
 import json
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.categories import ALL_CATEGORY_KEYS
@@ -26,7 +26,7 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(String, default="Europe/Kyiv", server_default="Europe/Kyiv")
     # JSON list of category keys, or the literal "all"
     categories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
     @property
@@ -62,6 +62,9 @@ class NewsItem(Base):
 
 class Digest(Base):
     __tablename__ = "digests"
+    __table_args__ = (
+        Index("ix_digests_target_date_category_group", "target_date", "category_group"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     target_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -72,6 +75,9 @@ class Digest(Base):
 
 class UserDeliveryLog(Base):
     __tablename__ = "user_delivery_logs"
+    __table_args__ = (
+        Index("ix_user_delivery_logs_user_status_sent", "user_id", "status", "sent_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)

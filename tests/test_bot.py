@@ -135,6 +135,34 @@ async def test_now_reports_summarizer_failure(session, monkeypatch):
     assert 1 not in digest._in_flight  # guard released
 
 
+async def test_now_reports_unexpected_failure(session, monkeypatch):
+    from bot.handlers import digest
+
+    status_message = MagicMock(edit_text=AsyncMock(), delete=AsyncMock())
+    message = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(return_value=status_message))
+    monkeypatch.setattr(digest, "get_or_generate_digest", AsyncMock(side_effect=RuntimeError("db exploded")))
+    await cmd_now(message, MagicMock(), session, make_settings(), MagicMock())
+    status_message.edit_text.assert_awaited_once()
+    assert "неочікувана помилка" in status_message.edit_text.await_args.args[0]
+    assert 1 not in digest._in_flight
+
+
+async def test_now_survives_status_delete_failure(session, monkeypatch):
+    from bot.handlers import digest
+    from services.summarizer.digest_service import DigestResult
+
+    status_message = MagicMock(
+        edit_text=AsyncMock(), delete=AsyncMock(side_effect=TelegramBadRequest(METHOD, "message to delete not found"))
+    )
+    message = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(return_value=status_message))
+    monkeypatch.setattr(digest, "get_or_generate_digest", AsyncMock(return_value=DigestResult("TEXT", 5, False)))
+    send = AsyncMock(return_value="sent")
+    monkeypatch.setattr(digest, "send_digest_text", send)
+    bot = MagicMock()
+    await cmd_now(message, bot, session, make_settings(), MagicMock())
+    send.assert_awaited_once_with(bot, 1, "TEXT")
+
+
 async def test_now_sends_digest(session, monkeypatch):
     from bot.handlers import digest
     from services.summarizer.digest_service import DigestResult

@@ -41,6 +41,25 @@ def test_extractor_strips_html_and_truncates():
     assert len(truncate_paragraphs("слово " * 300)) <= 701
 
 
+async def test_fetch_article_text_respects_max_bytes():
+    from unittest.mock import AsyncMock, MagicMock
+    from services.fetcher.extractor import fetch_article_text
+
+    async def fake_iter_chunked(size):
+        for _ in range(50):
+            yield b"x" * (64 * 1024)
+
+    resp = MagicMock()
+    resp.status = 200
+    resp.content.iter_chunked = fake_iter_chunked
+    session = MagicMock()
+    session.get.return_value.__aenter__ = AsyncMock(return_value=resp)
+    session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    text = await fetch_article_text(session, "https://example.com/huge")
+    assert isinstance(text, str)
+
+
 def test_categorizer():
     assert infer_category("ЗСУ відбили наступ, обстріл Харкова") == "war"
     assert infer_category("НБУ знизив облікову ставку, інфляція сповільнилась") == "economy"
