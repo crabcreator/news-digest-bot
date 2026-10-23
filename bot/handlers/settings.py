@@ -11,7 +11,14 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards.inline import ActionCB, CategoryCB, TimeCB, settings_keyboard
+from bot.keyboards.inline import (
+    ActionCB,
+    CategoryCB,
+    TimeCB,
+    TimezoneCB,
+    settings_keyboard,
+    timezone_keyboard,
+)
 from bot.keyboards.reply import BTN_NOW, BTN_SETTINGS, main_menu
 from bot.utils import ensure_user
 from core.categories import CATEGORY_BY_KEY
@@ -98,6 +105,42 @@ async def on_toggle_active(callback: CallbackQuery, session: AsyncSession, setti
     await _refresh(callback, user)
 
 
+async def on_pick_timezone(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        text = (
+            "🌍 <b>Виберіть ваш часовий пояс</b>\n\n"
+            f"Поточний: <b>{html.escape(user.timezone)}</b>\n"
+            "Час доставки дайджесту розраховуватиметься за цим поясом."
+        )
+        try:
+            await callback.message.edit_text(text, reply_markup=timezone_keyboard(user.timezone))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
+async def on_timezone_selected(
+    callback: CallbackQuery, callback_data: TimezoneCB, session: AsyncSession, settings: Settings
+) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    try:
+        user = await crud.set_user_timezone(session, user.id, callback_data.name)
+    except ValueError:
+        await callback.answer("Невідомий часовий пояс", show_alert=True)
+        return
+    await callback.answer(f"Часовий пояс: {callback_data.name}")
+    if user:
+        await _refresh(callback, user)
+
+
+async def on_back_to_settings(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await callback.answer()
+    await _refresh(callback, user)
+
+
 async def on_custom_time(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SettingsStates.waiting_time)
     await callback.answer()
@@ -128,6 +171,9 @@ def create_router() -> Router:
     router.callback_query.register(on_time_selected, TimeCB.filter())
     router.callback_query.register(on_category_toggled, CategoryCB.filter())
     router.callback_query.register(on_toggle_active, ActionCB.filter(F.name == "toggle_active"))
+    router.callback_query.register(on_pick_timezone, ActionCB.filter(F.name == "pick_timezone"))
+    router.callback_query.register(on_back_to_settings, ActionCB.filter(F.name == "back_to_settings"))
+    router.callback_query.register(on_timezone_selected, TimezoneCB.filter())
     router.callback_query.register(on_custom_time, ActionCB.filter(F.name == "custom_time"))
     # Free-text time input; commands and menu buttons fall through to their own handlers.
     router.message.register(

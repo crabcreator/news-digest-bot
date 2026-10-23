@@ -7,6 +7,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram.utils.chat_action import ChatActionSender
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.keyboards.reply import BTN_NOW
@@ -34,7 +35,8 @@ async def cmd_now(
     _in_flight.add(user.id)
     status_message = await message.answer("⏳ Готую дайджест за останні 4 години…")
     try:
-        result = await get_or_generate_digest(session, summarizer, user.category_list, "now", user.timezone)
+        async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
+            result = await get_or_generate_digest(session, summarizer, user.category_list, "now", user.timezone)
     except SummarizationError:
         logger.exception("/now failed for user %s", user.id)
         with suppress(TelegramAPIError):
