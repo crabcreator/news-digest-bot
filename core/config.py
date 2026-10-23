@@ -43,6 +43,25 @@ class Settings(BaseSettings):
     gemini_timeout_seconds: int = Field(90, ge=5)
     gemini_max_attempts: int = Field(3, ge=1)
 
+    admin_ids: list[int] | str = Field(default_factory=list)
+
+    @field_validator("admin_ids")
+    @classmethod
+    def _parse_admin_ids(cls, value: object) -> list[int]:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return []
+            if value.startswith("["):
+                import json
+
+                parsed = json.loads(value)
+                return [int(x) for x in parsed]
+            return [int(x.strip()) for x in value.split(",") if x.strip()]
+        if isinstance(value, (list, tuple)):
+            return [int(x) for x in value]
+        return []
+
     @field_validator("gemini_fallback_model", mode="before")
     @classmethod
     def _empty_fallback_is_none(cls, value: str | None) -> str | None:

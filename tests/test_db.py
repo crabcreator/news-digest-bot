@@ -97,3 +97,47 @@ async def test_prune_old_data(session):
     # Optimize doesn't crash
     await crud.optimize_db(session)
 
+
+async def test_set_user_timezone(session):
+    import pytest
+
+    user = await crud.get_or_create_user(session, 10)
+    assert user.timezone == "Europe/Kyiv"
+
+    updated = await crud.set_user_timezone(session, 10, "Europe/Warsaw")
+    assert updated.timezone == "Europe/Warsaw"
+
+    # Non-existent user returns None
+    assert await crud.set_user_timezone(session, 999, "Europe/London") is None
+
+    # Invalid timezone raises ValueError
+    with pytest.raises(ValueError, match="Invalid timezone"):
+        await crud.set_user_timezone(session, 10, "Invalid/Unknown_Zone")
+
+
+async def test_get_system_stats(session):
+    now = utcnow()
+    u1 = await crud.get_or_create_user(session, 101)
+    u2 = await crud.get_or_create_user(session, 102)
+    await crud.set_active(session, 102, False)
+
+    # News: 1 recent, 1 old
+    n1 = crud.NewsItemData("https://y/1", "T1", "Src", now - timedelta(hours=2))
+    n2 = crud.NewsItemData("https://y/2", "T2", "Src", now - timedelta(hours=48))
+    await crud.add_news_items(session, [n1, n2])
+
+    # Digest
+    d = await crud.save_digest(session, now.date(), "digest content")
+
+    # Delivery logs: 1 sent recent, 1 sent old, 1 failed
+    await crud.log_delivery(session, 101, d.id, "sent")
+    await crud.log_delivery(session, 102, d.id, "failed")
+
+    stats = await crud.get_system_stats(session, now=now)
+    assert stats.total_users == 2
+    assert stats.active_users == 1
+    assert stats.total_news == 2
+    assert stats.news_last_24h == 1
+    assert stats.total_digests == 1
+    assert stats.deliveries_last_24h == 1
+

@@ -4,11 +4,19 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.methods import SendMessage
+from aiogram.types import Message
 
 from bot.bot_instance import create_bot, create_dispatcher
 from bot.handlers import settings as settings_handlers
 from bot.handlers.digest import cmd_now
-from bot.keyboards.inline import CategoryCB, TimeCB, settings_keyboard
+from bot.keyboards.inline import (
+    ActionCB,
+    CategoryCB,
+    TimeCB,
+    TimezoneCB,
+    settings_keyboard,
+    timezone_keyboard,
+)
 from core.config import Settings
 from db import crud
 from services import delivery
@@ -64,6 +72,35 @@ async def test_time_callback_updates_user(session):
     await settings_handlers.on_time_selected(callback, TimeCB(hour=8, minute=0), session, make_settings())
     user = await crud.get_user(session, 1)
     assert (user.delivery_hour, user.delivery_minute) == (8, 0)
+
+
+async def test_timezone_keyboard_and_callbacks(session):
+    user = await crud.get_or_create_user(session, 1)
+    kb = timezone_keyboard(user.timezone)
+    labels = [b.text for row in kb.inline_keyboard for b in row]
+    assert any("✅" in l and "Київ" in l for l in labels)
+    assert any("Варшава" in l for l in labels)
+    assert any("Назад" in l for l in labels)
+    assert all(len(b.callback_data.encode()) <= 64 for row in kb.inline_keyboard for b in row)
+
+    # on_pick_timezone
+    msg = MagicMock(spec=Message, edit_text=AsyncMock())
+    callback = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(), message=msg)
+    await settings_handlers.on_pick_timezone(callback, session, make_settings())
+    msg.edit_text.assert_awaited_once()
+    assert "часовий пояс" in msg.edit_text.await_args.args[0].lower()
+
+    # on_timezone_selected
+    await settings_handlers.on_timezone_selected(
+        callback, TimezoneCB(name="Europe/Warsaw"), session, make_settings()
+    )
+    user = await crud.get_user(session, 1)
+    assert user.timezone == "Europe/Warsaw"
+
+    # on_back_to_settings
+    msg.edit_text.reset_mock()
+    await settings_handlers.on_back_to_settings(callback, session, make_settings())
+    msg.edit_text.assert_awaited_once()
 
 
 # ------------------------------------------------------------------ delivery
@@ -187,3 +224,19 @@ async def test_dispatcher_builds():
     dp = create_dispatcher(settings, MagicMock(), MagicMock())
     assert {r.name for r in dp.sub_routers} == {"common", "settings", "digest"}
     await bot.session.close()
+
+
+async def test_cmd_stats_restricted(session):
+    from bot.handlers.common import cmd_stats
+
+    settings = Settings(bot_token="t", gemini_api_key="k", admin_ids=[777], _env_file=None)
+    # Non-admin
+    msg_user = MagicMock(from_user=MagicMock(id=111), answer=AsyncMock())
+    await cmd_stats(msg_user, session, settings)
+    msg_user.answer.assert_not_called()
+
+    # Admin
+    msg_admin = MagicMock(from_user=MagicMock(id=777), answer=AsyncMock())
+    await cmd_stats(msg_admin, session, settings)
+    msg_admin.answer.assert_awaited_once()
+    assert "Статистика бота" in msg_admin.answer.await_args.args[0]

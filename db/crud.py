@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,6 +84,20 @@ async def toggle_category(session: AsyncSession, user_id: int, category: str) ->
 async def set_active(session: AsyncSession, user_id: int, is_active: bool) -> None:
     await session.execute(update(User).where(User.id == user_id).values(is_active=is_active))
     await session.commit()
+
+
+async def set_user_timezone(session: AsyncSession, user_id: int, timezone: str) -> User | None:
+    try:
+        ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(f"Invalid timezone: {timezone}") from exc
+    user = await session.get(User, user_id)
+    if user is None:
+        return None
+    user.timezone = timezone
+    await session.commit()
+    await session.refresh(user)
+    return user
 
 
 async def get_due_users(session: AsyncSession, now_utc: datetime | None = None) -> list[User]:
@@ -294,4 +308,45 @@ async def prune_old_data(
 async def optimize_db(session: AsyncSession) -> None:
     """Run SQLite PRAGMA optimize."""
     await session.execute(text("PRAGMA optimize;"))
+
+
+# --------------------------------------------------------------------------- stats
+
+
+@dataclass(slots=True)
+class SystemStats:
+    total_users: int
+    active_users: int
+    total_news: int
+    news_last_24h: int
+    total_digests: int
+    deliveries_last_24h: int
+
+
+async def get_system_stats(session: AsyncSession, now: datetime | None = None) -> SystemStats:
+    """Aggregate statistics for admin dashboard."""
+    now = now or utcnow()
+    cutoff_24h = now - timedelta(hours=24)
+
+    total_users = await session.scalar(select(func.count(User.id))) or 0
+    active_users = await session.scalar(select(func.count(User.id)).where(User.is_active.is_(True))) or 0
+    total_news = await session.scalar(select(func.count(NewsItem.id))) or 0
+    news_24h = await session.scalar(select(func.count(NewsItem.id)).where(NewsItem.published_at >= cutoff_24h)) or 0
+    total_digests = await session.scalar(select(func.count(Digest.id))) or 0
+    deliveries_24h = (
+        await session.scalar(
+            select(func.count(UserDeliveryLog.id)).where(
+                UserDeliveryLog.status == "sent", UserDeliveryLog.sent_at >= cutoff_24h
+            )
+        )
+        or 0
+    )
+    return SystemStats(
+        total_users=total_users,
+        active_users=active_users,
+        total_news=total_news,
+        news_last_24h=news_24h,
+        total_digests=total_digests,
+        deliveries_last_24h=deliveries_24h,
+    )
 
