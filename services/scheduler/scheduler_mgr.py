@@ -6,6 +6,7 @@ from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from core.config import Settings
+from services.fetcher.rss_client import FeedSource
 from services.scheduler.jobs import (
     SessionFactory,
     check_and_send_scheduled_digests,
@@ -22,12 +23,13 @@ def create_scheduler(
     summarizer: GeminiSummarizer,
 ) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=timezone.utc)
+    feed_sources = [FeedSource(name=f.name, url=f.url) for f in settings.rss_feeds]
 
     scheduler.add_job(
         fetch_and_store_rss_news,
         trigger="interval",
         minutes=settings.fetch_interval_minutes,
-        args=[session_factory],
+        args=[session_factory, feed_sources],
         id="fetch_rss",
         max_instances=1,
         coalesce=True,

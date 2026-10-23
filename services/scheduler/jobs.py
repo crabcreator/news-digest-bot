@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from db import crud
 from db.models import User, utcnow
 from services.delivery import deliver_digest
-from services.fetcher.rss_client import ingest_feeds
+from services.fetcher.rss_client import DEFAULT_FEEDS, FeedSource, ingest_feeds
 from services.summarizer.digest_service import cache_key, get_or_generate_digest
 from services.summarizer.gemini_client import GeminiSummarizer, SummarizationError
 
@@ -24,11 +24,14 @@ DUPLICATE_DELIVERY_WINDOW = timedelta(minutes=10)
 DELIVERY_CONCURRENCY = 10
 
 
-async def fetch_and_store_rss_news(session_factory: SessionFactory) -> int:
+async def fetch_and_store_rss_news(
+    session_factory: SessionFactory,
+    sources: tuple[FeedSource, ...] | list[FeedSource] = DEFAULT_FEEDS,
+) -> int:
     """Job 1 (every 30 min): ingest all configured RSS feeds into the database."""
     try:
         async with session_factory() as db:
-            return await ingest_feeds(db)
+            return await ingest_feeds(db, sources=sources)
     except Exception:  # noqa: BLE001 - a failed run must not stop the scheduler
         logger.exception("RSS aggregation failed")
         return 0

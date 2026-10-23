@@ -10,6 +10,17 @@ def test_settings_load(monkeypatch):
     s = Settings(_env_file=None)
     assert s.default_delivery_hour == 21
     assert s.database_url.startswith("sqlite+aiosqlite")
+    assert len(s.rss_feeds) == 3
+
+
+def test_custom_rss_feeds(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "t")
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("RSS_FEEDS", '[{"name": "Custom", "url": "https://example.com/rss"}]')
+    s = Settings(_env_file=None)
+    assert len(s.rss_feeds) == 1
+    assert s.rss_feeds[0].name == "Custom"
+    assert s.rss_feeds[0].url == "https://example.com/rss"
 
 
 def test_settings_require_secrets(monkeypatch):
