@@ -6,6 +6,7 @@ import logging
 from bot.bot_instance import create_bot, create_dispatcher, setup_bot_commands
 from core.config import get_settings
 from core.database import create_engine, create_session_factory, init_db
+from healthcheck import remove_heartbeat, touch_heartbeat
 from services.scheduler.scheduler_mgr import create_scheduler
 from services.summarizer.gemini_client import GeminiSummarizer
 
@@ -42,12 +43,14 @@ async def main() -> None:
     try:
         await setup_bot_commands(bot)
         scheduler.start()
+        touch_heartbeat()
         logger.info("Bot started (model=%s)", settings.gemini_model)
         # Drop updates that piled up while the bot was offline.
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         logger.info("Shutting down")
+        remove_heartbeat()
         if scheduler.running:
             scheduler.shutdown(wait=False)
         await bot.session.close()

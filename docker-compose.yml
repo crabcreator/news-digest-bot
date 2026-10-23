@@ -8,6 +8,12 @@ services:
     environment:
       # Always keep the database on the mounted volume, regardless of the .env value.
       DATABASE_URL: sqlite+aiosqlite:///./data/news_bot.db
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     volumes:
       - bot_data:/app/data
 
