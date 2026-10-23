@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 MAX_SUMMARY_CHARS = 700
 MIN_USEFUL_CHARS = 150  # feed snippets shorter than this are considered truncated
 MAX_PARAGRAPHS = 3
+MAX_ARTICLE_BYTES = 2 * 1024 * 1024  # 2 MB limit for article page download
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"[ \t\r\f\v\u00a0]+")
@@ -71,7 +72,14 @@ async def fetch_article_text(session: aiohttp.ClientSession, url: str) -> str:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
             if resp.status != 200:
                 return ""
-            page = await resp.text(errors="replace")
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in resp.content.iter_chunked(64 * 1024):
+                size += len(chunk)
+                chunks.append(chunk)
+                if size >= MAX_ARTICLE_BYTES:
+                    break
+            page = b"".join(chunks).decode("utf-8", errors="replace")
     except (aiohttp.ClientError, asyncio.TimeoutError):
         logger.debug("Could not download article %s", url)
         return ""

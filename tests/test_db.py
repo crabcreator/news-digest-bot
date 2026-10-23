@@ -53,3 +53,10 @@ async def test_digest_cache_and_delivery_log(session):
 
 def test_category_group_is_stable():
     assert crud.make_category_group(["b", "a", "a"]) == "a,b"
+
+
+async def test_sqlite_pragmas(session):
+    from sqlalchemy import text
+
+    result = await session.execute(text("PRAGMA busy_timeout;"))
+    assert result.scalar() == 10000

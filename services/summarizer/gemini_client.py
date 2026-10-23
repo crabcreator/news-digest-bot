@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 from collections.abc import Sequence
 
 from google import genai
@@ -104,4 +105,8 @@ class GeminiSummarizer:
     def _parse(text: str | None) -> list[Topic]:
         if not text:
             raise ValueError("Empty response from Gemini")
-        return DigestResponse.model_validate_json(text).topics
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        return DigestResponse.model_validate_json(cleaned).topics
