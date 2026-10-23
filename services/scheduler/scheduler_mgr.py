@@ -9,6 +9,7 @@ from core.config import Settings
 from services.scheduler.jobs import (
     SessionFactory,
     check_and_send_scheduled_digests,
+    cleanup_old_data,
     fetch_and_store_rss_news,
 )
 from services.summarizer.gemini_client import GeminiSummarizer
@@ -43,5 +44,15 @@ def create_scheduler(
         max_instances=1,
         coalesce=True,
         misfire_grace_time=30,
+    )
+    scheduler.add_job(
+        cleanup_old_data,
+        trigger="cron",
+        hour=3,
+        minute=0,
+        args=[session_factory],
+        id="cleanup_data",
+        max_instances=1,
+        coalesce=True,
     )
     return scheduler

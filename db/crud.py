@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -266,3 +266,32 @@ async def was_delivered_since(session: AsyncSession, user_id: int, since: dateti
         .limit(1)
     )
     return await session.scalar(stmt) is not None
+
+
+# --------------------------------------------------------------------------- maintenance
+
+
+async def prune_old_data(
+    session: AsyncSession,
+    news_retention_days: int = 14,
+    digest_retention_days: int = 30,
+    log_retention_days: int = 30,
+    now: datetime | None = None,
+) -> tuple[int, int, int]:
+    """Delete records older than retention thresholds. Returns (deleted_news, deleted_digests, deleted_logs)."""
+    now = now or utcnow()
+    news_cutoff = now - timedelta(days=news_retention_days)
+    digest_cutoff_date = (now - timedelta(days=digest_retention_days)).date()
+    log_cutoff = now - timedelta(days=log_retention_days)
+
+    res_news = await session.execute(delete(NewsItem).where(NewsItem.published_at < news_cutoff))
+    res_digests = await session.execute(delete(Digest).where(Digest.target_date < digest_cutoff_date))
+    res_logs = await session.execute(delete(UserDeliveryLog).where(UserDeliveryLog.sent_at < log_cutoff))
+    await session.commit()
+    return (res_news.rowcount or 0, res_digests.rowcount or 0, res_logs.rowcount or 0)
+
+
+async def optimize_db(session: AsyncSession) -> None:
+    """Run SQLite PRAGMA optimize."""
+    await session.execute(text("PRAGMA optimize;"))
+

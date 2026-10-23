@@ -34,6 +34,31 @@ async def fetch_and_store_rss_news(session_factory: SessionFactory) -> int:
         return 0
 
 
+async def cleanup_old_data(
+    session_factory: SessionFactory,
+    news_retention_days: int = 14,
+    digest_retention_days: int = 30,
+    log_retention_days: int = 30,
+) -> tuple[int, int, int]:
+    """Job 3 (daily): prune old news, digests, and delivery logs, then optimize SQLite."""
+    try:
+        async with session_factory() as db:
+            deleted = await crud.prune_old_data(
+                db, news_retention_days, digest_retention_days, log_retention_days
+            )
+            await crud.optimize_db(db)
+            logger.info(
+                "Data cleanup finished: pruned %d news, %d digests, %d logs",
+                deleted[0],
+                deleted[1],
+                deleted[2],
+            )
+            return deleted
+    except Exception:  # noqa: BLE001
+        logger.exception("Data cleanup job failed")
+        return (0, 0, 0)
+
+
 async def check_and_send_scheduled_digests(
     bot: Bot,
     session_factory: SessionFactory,

@@ -138,12 +138,18 @@ async def test_fetch_job_swallows_errors(session_factory, monkeypatch):
     assert await jobs.fetch_and_store_rss_news(session_factory) == 0
 
 
-async def test_scheduler_has_both_jobs():
+async def test_scheduler_has_jobs():
     from core.config import Settings
 
     settings = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
     scheduler = create_scheduler(settings, MagicMock(), MagicMock(), MagicMock())
     jobs_by_id = {j.id: j for j in scheduler.get_jobs()}
-    assert set(jobs_by_id) == {"fetch_rss", "send_digests"}
+    assert set(jobs_by_id) == {"fetch_rss", "send_digests", "cleanup_data"}
     # Regression: the startup fetch was skipped as "missed" when bot startup took >1s.
     assert jobs_by_id["fetch_rss"].misfire_grace_time >= 60
+
+
+async def test_cleanup_job_executes(session_factory):
+    res = await jobs.cleanup_old_data(session_factory)
+    assert res == (0, 0, 0)
+

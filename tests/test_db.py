@@ -60,3 +60,40 @@ async def test_sqlite_pragmas(session):
 
     result = await session.execute(text("PRAGMA busy_timeout;"))
     assert result.scalar() == 10000
+
+
+async def test_prune_old_data(session):
+    now = utcnow()
+    await crud.get_or_create_user(session, 1)
+
+    # News
+    fresh_news = crud.NewsItemData("https://x/fresh", "Fresh", "Src", now - timedelta(days=2))
+    old_news = crud.NewsItemData("https://x/old", "Old", "Src", now - timedelta(days=20))
+    await crud.add_news_items(session, [fresh_news, old_news])
+
+    # Digest
+    await crud.save_digest(session, (now - timedelta(days=40)).date(), "old digest")
+    fresh_digest = await crud.save_digest(session, now.date(), "fresh digest")
+
+    # Delivery log
+    await crud.log_delivery(session, 1, fresh_digest.id, "sent")
+    from db.models import UserDeliveryLog
+    from sqlalchemy import update
+    # create an artificially old log
+    await session.execute(
+        update(UserDeliveryLog).where(UserDeliveryLog.id == 1).values(sent_at=now - timedelta(days=45))
+    )
+    await crud.log_delivery(session, 1, fresh_digest.id, "sent")  # fresh log
+
+    deleted = await crud.prune_old_data(session, news_retention_days=14, digest_retention_days=30, log_retention_days=30, now=now)
+    assert deleted == (1, 1, 1)
+
+    # Verify fresh remain
+    news = await crud.get_news_window(session, hours=100)
+    assert len(news) == 1 and news[0].url == "https://x/fresh"
+    assert await crud.get_digest(session, now.date()) is not None
+    assert await crud.was_delivered_since(session, 1, now - timedelta(days=1))
+
+    # Optimize doesn't crash
+    await crud.optimize_db(session)
+
