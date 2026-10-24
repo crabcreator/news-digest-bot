@@ -27,6 +27,8 @@ class User(Base):
     # JSON list of category keys, or the literal "all"
     categories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
     tech_subcategories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
+    is_world_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    world_categories: Mapped[str] = mapped_column(Text, default="all", server_default="all")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
@@ -62,9 +64,28 @@ class User(Base):
         selected = [c for c in TECH_SUBCATEGORY_KEYS if c in value]
         self.tech_subcategories = "all" if len(selected) == len(TECH_SUBCATEGORY_KEYS) else json.dumps(selected)
 
+    @property
+    def world_category_list(self) -> list[str]:
+        raw = (self.world_categories or "all").strip()
+        if raw == "all":
+            return list(ALL_CATEGORY_KEYS)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = [part.strip() for part in raw.split(",")]
+        return [c for c in ALL_CATEGORY_KEYS if c in parsed]
+
+    @world_category_list.setter
+    def world_category_list(self, value: list[str]) -> None:
+        selected = [c for c in ALL_CATEGORY_KEYS if c in value]
+        self.world_categories = "all" if len(selected) == len(ALL_CATEGORY_KEYS) else json.dumps(selected)
+
 
 class NewsItem(Base):
     __tablename__ = "news_items"
+    __table_args__ = (
+        Index("ix_news_items_scope_published", "scope", "published_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     url: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -73,6 +94,7 @@ class NewsItem(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[str | None] = mapped_column(String, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope: Mapped[str] = mapped_column(String, default="ua", server_default="ua", index=True)
     published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 

@@ -30,7 +30,7 @@ class CategoryCB(CallbackData, prefix="c"):
 
 
 class ActionCB(CallbackData, prefix="a"):
-    name: str  # "toggle_active" | "custom_time" | "pick_timezone" | "back_to_settings" | "tech_subcategories"
+    name: str  # "toggle_active" | "custom_time" | "pick_timezone" | "back_to_settings" | "tech_subcategories" | "menu_ua" | "menu_world" | "toggle_world_active"
 
 
 class TimezoneCB(CallbackData, prefix="tz"):
@@ -38,6 +38,10 @@ class TimezoneCB(CallbackData, prefix="tz"):
 
 
 class TechSubcategoryCB(CallbackData, prefix="ts"):
+    key: str
+
+
+class WorldCategoryCB(CallbackData, prefix="wc"):
     key: str
 
 
@@ -56,11 +60,63 @@ def settings_keyboard(user: User) -> InlineKeyboardMarkup:
     actions.adjust(2)
     builder.attach(actions)
 
+    sections = InlineKeyboardBuilder()
+    ua_count = len(user.category_list)
+    world_status = "увімкнено ✅" if user.is_world_active else "вимкнено 🔕"
+    sections.button(text=f"🇺🇦 Новини України ({ua_count}/8)", callback_data=ActionCB(name="menu_ua"))
+    sections.button(text=f"🌍 Світові новини ({world_status})", callback_data=ActionCB(name="menu_world"))
+    sections.adjust(1)
+    builder.attach(sections)
+
+    toggle = InlineKeyboardBuilder()
+    toggle.button(
+        text="🔕 Вимкнути щоденний дайджест" if user.is_active else "🔔 Увімкнути щоденний дайджест",
+        callback_data=ActionCB(name="toggle_active"),
+    )
+    builder.attach(toggle)
+    return builder.as_markup()
+
+
+def ua_categories_keyboard(user: User) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
     selected_categories = set(user.category_list)
+    for cat in CATEGORIES:
+        mark = "✅" if cat.key in selected_categories else "▫️"
+        builder.button(text=f"{mark} {cat.emoji} {cat.title}", callback_data=CategoryCB(key=cat.key))
+    builder.adjust(2)
+
+    if "technology" in selected_categories:
+        tech_btn = InlineKeyboardBuilder()
+        sub_count = len(user.tech_subcategory_list)
+        total_count = len(TECH_SUBCATEGORIES)
+        suffix = "всі" if sub_count == total_count else f"{sub_count}/{total_count}"
+        tech_btn.button(
+            text=f"⚙️ Галузі технологій ({suffix})",
+            callback_data=ActionCB(name="tech_subcategories"),
+        )
+        builder.attach(tech_btn)
+
+    back = InlineKeyboardBuilder()
+    back.button(text="⬅️ Назад до налаштувань", callback_data=ActionCB(name="back_to_settings"))
+    builder.attach(back)
+    return builder.as_markup()
+
+
+def world_categories_keyboard(user: User) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+
+    toggle = InlineKeyboardBuilder()
+    toggle.button(
+        text="🔕 Вимкнути світові новини" if user.is_world_active else "🔔 Увімкнути світові новини",
+        callback_data=ActionCB(name="toggle_world_active"),
+    )
+    builder.attach(toggle)
+
+    selected_categories = set(user.world_category_list)
     cats = InlineKeyboardBuilder()
     for cat in CATEGORIES:
         mark = "✅" if cat.key in selected_categories else "▫️"
-        cats.button(text=f"{mark} {cat.emoji} {cat.title}", callback_data=CategoryCB(key=cat.key))
+        cats.button(text=f"{mark} {cat.emoji} {cat.title}", callback_data=WorldCategoryCB(key=cat.key))
     cats.adjust(2)
     builder.attach(cats)
 
@@ -75,12 +131,9 @@ def settings_keyboard(user: User) -> InlineKeyboardMarkup:
         )
         builder.attach(tech_btn)
 
-    toggle = InlineKeyboardBuilder()
-    toggle.button(
-        text="🔕 Вимкнути щоденний дайджест" if user.is_active else "🔔 Увімкнути щоденний дайджест",
-        callback_data=ActionCB(name="toggle_active"),
-    )
-    builder.attach(toggle)
+    back = InlineKeyboardBuilder()
+    back.button(text="⬅️ Назад до налаштувань", callback_data=ActionCB(name="back_to_settings"))
+    builder.attach(back)
     return builder.as_markup()
 
 

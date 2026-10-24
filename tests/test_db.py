@@ -160,3 +160,56 @@ async def test_tech_subcategories_crud(session):
     # Invalid subcategory
     assert await crud.toggle_tech_subcategory(session, 201, "invalid_sub") is None
 
+
+async def test_user_world_news_fields_and_toggle(session):
+    user = await crud.get_or_create_user(session, 301)
+    assert user.is_world_active is False
+    assert user.world_categories == "all"
+    assert len(user.world_category_list) == 8
+
+    # Toggle world category off
+    user = await crud.toggle_world_category(session, 301, "showbiz")
+    assert "showbiz" not in user.world_category_list
+    assert len(user.world_category_list) == 7
+
+    # Toggle world active
+    await crud.set_world_active(session, 301, True)
+    await session.refresh(user)
+    assert user.is_world_active is True
+
+    # Toggle world category back on -> resets to "all"
+    user = await crud.toggle_world_category(session, 301, "showbiz")
+    assert user.world_categories == "all"
+
+
+async def test_news_items_scope_filtering(session):
+    now = utcnow()
+    ua_item = crud.NewsItemData("https://x/ua", "UA News", "Src UA", now - timedelta(hours=1), scope="ua")
+    world_item = crud.NewsItemData("https://x/world", "World News", "Src World", now - timedelta(hours=1), scope="world")
+    assert await crud.add_news_items(session, [ua_item, world_item]) == 2
+
+    ua_news = await crud.get_news_since(session, now - timedelta(hours=2), scope="ua")
+    assert [n.url for n in ua_news] == ["https://x/ua"]
+
+    world_news = await crud.get_news_since(session, now - timedelta(hours=2), scope="world")
+    assert [n.url for n in world_news] == ["https://x/world"]
+
+
+async def test_sqlite_schema_migration_handles_existing_tables(session):
+    from core.database import _migrate_sqlite_schema
+    from sqlalchemy import text
+
+    # _migrate_sqlite_schema should run idempotently without error
+    conn = await session.connection()
+    await conn.run_sync(_migrate_sqlite_schema)
+
+    # Check columns exist
+    res = await session.execute(text("PRAGMA table_info(users);"))
+    cols = {row[1] for row in res.fetchall()}
+    assert "is_world_active" in cols
+    assert "world_categories" in cols
+
+    res = await session.execute(text("PRAGMA table_info(news_items);"))
+    news_cols = {row[1] for row in res.fetchall()}
+    assert "scope" in news_cols
+

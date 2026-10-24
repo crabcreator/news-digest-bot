@@ -46,10 +46,24 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 def _migrate_sqlite_schema(connection) -> None:  # noqa: ANN001
     """Lightweight schema migration for existing SQLite databases."""
     try:
-        rows = connection.exec_driver_sql("PRAGMA table_info(users);").fetchall()
-        cols = {row[1] for row in rows}
-        if cols and "tech_subcategories" not in cols:
-            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN tech_subcategories TEXT DEFAULT 'all';")
+        user_rows = connection.exec_driver_sql("PRAGMA table_info(users);").fetchall()
+        user_cols = {row[1] for row in user_rows}
+        if user_cols:
+            if "tech_subcategories" not in user_cols:
+                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN tech_subcategories TEXT DEFAULT 'all';")
+            if "is_world_active" not in user_cols:
+                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN is_world_active BOOLEAN DEFAULT 0;")
+            if "world_categories" not in user_cols:
+                connection.exec_driver_sql("ALTER TABLE users ADD COLUMN world_categories TEXT DEFAULT 'all';")
+
+        news_rows = connection.exec_driver_sql("PRAGMA table_info(news_items);").fetchall()
+        news_cols = {row[1] for row in news_rows}
+        if news_cols:
+            if "scope" not in news_cols:
+                connection.exec_driver_sql("ALTER TABLE news_items ADD COLUMN scope TEXT DEFAULT 'ua';")
+            connection.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_news_items_scope_published ON news_items(scope, published_at);"
+            )
     except Exception:
         logger.exception("Schema migration check failed")
 

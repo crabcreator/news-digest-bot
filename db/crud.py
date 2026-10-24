@@ -33,6 +33,8 @@ async def get_or_create_user(
     delivery_minute: int = 0,
     timezone: str = "Europe/Kyiv",
     tech_subcategories: str = "all",
+    is_world_active: bool = False,
+    world_categories: str = "all",
     reactivate: bool = False,
 ) -> User:
     """Return the user, creating it if needed and refreshing the profile.
@@ -50,6 +52,8 @@ async def get_or_create_user(
             timezone=timezone,
             categories="all",
             tech_subcategories=tech_subcategories,
+            is_world_active=is_world_active,
+            world_categories=world_categories,
             is_active=True,
         )
         session.add(user)
@@ -81,6 +85,22 @@ async def toggle_category(session: AsyncSession, user_id: int, category: str) ->
     user.category_list = list(selected)
     await session.commit()
     return user
+
+
+async def toggle_world_category(session: AsyncSession, user_id: int, category: str) -> User | None:
+    user = await session.get(User, user_id)
+    if user is None:
+        return None
+    selected = set(user.world_category_list)
+    selected.symmetric_difference_update({category})
+    user.world_category_list = list(selected)
+    await session.commit()
+    return user
+
+
+async def set_world_active(session: AsyncSession, user_id: int, is_active: bool) -> None:
+    await session.execute(update(User).where(User.id == user_id).values(is_world_active=is_active))
+    await session.commit()
 
 
 async def toggle_tech_subcategory(session: AsyncSession, user_id: int, subcategory: str) -> User | None:
@@ -152,6 +172,7 @@ class NewsItemData:
     published_at: datetime  # naive UTC
     category: str | None = None
     summary: str | None = None
+    scope: str = "ua"
 
 
 async def get_existing_urls(session: AsyncSession, urls: Sequence[str]) -> set[str]:
@@ -176,6 +197,7 @@ async def add_news_items(session: AsyncSession, items: Iterable[NewsItemData]) -
                 source=item.source,
                 category=item.category,
                 summary=item.summary,
+                scope=item.scope,
                 published_at=item.published_at,
             )
             .on_conflict_do_nothing()
@@ -191,9 +213,15 @@ async def get_news_since(
     since: datetime,
     categories: Sequence[str] | None = None,
     limit: int | None = None,
+    scope: str = "ua",
 ) -> list[NewsItem]:
     """News published since `since` (naive UTC), newest first. Uncategorised items are always included."""
-    stmt = select(NewsItem).where(NewsItem.published_at >= since).order_by(NewsItem.published_at.desc())
+    stmt = select(NewsItem).where(NewsItem.published_at >= since)
+    if scope == "ua":
+        stmt = stmt.where((NewsItem.scope == "ua") | (NewsItem.scope.is_(None)))
+    else:
+        stmt = stmt.where(NewsItem.scope == scope)
+    stmt = stmt.order_by(NewsItem.published_at.desc())
     if categories is not None:
         stmt = stmt.where(NewsItem.category.in_(list(categories)) | NewsItem.category.is_(None))
     if limit:
@@ -202,18 +230,20 @@ async def get_news_since(
 
 
 async def get_news_window(
-    session: AsyncSession, hours: int = 24, categories: Sequence[str] | None = None
+    session: AsyncSession, hours: int = 24, categories: Sequence[str] | None = None, scope: str = "ua"
 ) -> list[NewsItem]:
-    return await get_news_since(session, utcnow() - timedelta(hours=hours), categories)
+    return await get_news_since(session, utcnow() - timedelta(hours=hours), categories, scope=scope)
 
 
-async def get_uncategorized_news(session: AsyncSession, since: datetime, limit: int = 100) -> list[NewsItem]:
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.category.is_(None), NewsItem.published_at >= since)
-        .order_by(NewsItem.published_at.desc())
-        .limit(limit)
-    )
+async def get_uncategorized_news(
+    session: AsyncSession, since: datetime, limit: int = 100, scope: str | None = None
+) -> list[NewsItem]:
+    stmt = select(NewsItem).where(NewsItem.category.is_(None), NewsItem.published_at >= since)
+    if scope == "ua":
+        stmt = stmt.where((NewsItem.scope == "ua") | (NewsItem.scope.is_(None)))
+    elif scope:
+        stmt = stmt.where(NewsItem.scope == scope)
+    stmt = stmt.order_by(NewsItem.published_at.desc()).limit(limit)
     return list((await session.scalars(stmt)).all())
 
 

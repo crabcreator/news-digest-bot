@@ -153,3 +153,20 @@ async def test_cleanup_job_executes(session_factory):
     res = await jobs.cleanup_old_data(session_factory)
     assert res == (0, 0, 0)
 
+
+async def test_scheduled_delivery_sends_world_digest_as_second_message(session_factory):
+    # User 1 has world active, User 2 does not
+    await seed(session_factory, users=(1, 2))
+    async with session_factory() as db:
+        await crud.set_world_active(db, 1, True)
+        # Add world news item
+        await crud.add_news_items(
+            db, [crud.NewsItemData("https://e.com/w1", "WT", "WorldSrc", DELIVERY_MOMENT - timedelta(hours=2), "war", "wx", scope="world")]
+        )
+
+    bot, summarizer = make_bot(), FakeSummarizer()
+    sent = await jobs.check_and_send_scheduled_digests(bot, session_factory, summarizer, DELIVERY_MOMENT)
+    assert sent == 2  # 2 primary users served
+    # Bot sent messages: User 1 got UA + World (2 messages), User 2 got UA (1 message) -> total 3 messages sent
+    assert bot.send_message.await_count == 3
+
