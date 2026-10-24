@@ -24,7 +24,8 @@ def create_scheduler(
 ) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=timezone.utc)
     feed_sources = [
-        FeedSource(name=f.name, url=f.url, default_category=f.default_category) for f in settings.rss_feeds
+        FeedSource(name=f.name, url=f.url, default_category=f.default_category, scope=f.scope)
+        for f in settings.rss_feeds
     ]
 
     scheduler.add_job(
