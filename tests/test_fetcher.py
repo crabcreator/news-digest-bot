@@ -160,3 +160,46 @@ async def test_ingest_feeds_assigns_world_scope(session, monkeypatch):
     assert await ingest_feeds(session, [world_src], http=DummyHttp()) == 1
     item = (await session.scalars(select(NewsItem).where(NewsItem.url == "https://example.com/world-item-1"))).one()
     assert item.scope == "world"
+
+
+async def test_ingest_feeds_assigns_specialized_categories(session, monkeypatch):
+    from sqlalchemy import select
+    from db.models import NewsItem
+    from services.fetcher import rss_client
+
+    feeds = [
+        FeedSource("Економічна правда", "https://example.com/ep", default_category="economy", scope="ua"),
+        FeedSource("Наука.ua", "https://example.com/nauka", default_category="science", scope="ua"),
+        FeedSource("Читомо", "https://example.com/chytomo", default_category="culture", scope="ua"),
+        FeedSource("ТаблоID", "https://example.com/tabloid", default_category="showbiz", scope="ua"),
+    ]
+
+    def make_rss(name):
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>{name}</title>
+<item><title>Title for {name}</title>
+<link>https://example.com/{name}</link>
+<description>Desc</description>
+<pubDate>Thu, 22 Oct 2026 13:00:00 +0300</pubDate></item>
+</channel></rss>""".encode("utf-8")
+
+    async def fake_fetch_all(http, sources):
+        entries = []
+        for s in sources:
+            entries.extend(parse_feed_bytes(make_rss(s.name), s))
+        return entries
+
+    async def fake_summary(http, url, snippet):
+        return "Summary"
+
+    monkeypatch.setattr(rss_client, "fetch_all_feeds", fake_fetch_all)
+    monkeypatch.setattr(rss_client, "build_summary", fake_summary)
+
+    class DummyHttp:
+        async def close(self): ...
+
+    assert await ingest_feeds(session, feeds, http=DummyHttp()) == 4
+    for f in feeds:
+        item = (await session.scalars(select(NewsItem).where(NewsItem.url == f"https://example.com/{f.name}"))).one()
+        assert item.category == f.default_category
+        assert item.scope == f.scope
