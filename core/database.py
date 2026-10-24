@@ -67,7 +67,8 @@ def _migrate_sqlite_schema(connection) -> None:  # noqa: ANN001
             # Ensure articles from known world sources have scope='world'
             connection.exec_driver_sql(
                 "UPDATE news_items SET scope = 'world' WHERE source IN "
-                "('BBC World', 'The Guardian', 'DW World', 'The Verge', 'TechCrunch', 'Ars Technica', 'Wired') "
+                "('BBC World', 'The Guardian', 'DW World', 'The Verge', 'TechCrunch', 'Ars Technica', 'Wired', "
+                "'CNBC Economy', 'Nature News', 'Phys.org', 'BBC Culture', 'Variety') "
                 "AND (scope IS NULL OR scope != 'world');"
             )
     except Exception:

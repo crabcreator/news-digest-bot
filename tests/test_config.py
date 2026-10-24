@@ -10,10 +10,15 @@ def test_settings_load(monkeypatch):
     s = Settings(_env_file=None)
     assert s.default_delivery_hour == 21
     assert s.database_url.startswith("sqlite+aiosqlite")
-    assert len(s.rss_feeds) == 13
-    assert s.rss_feeds[3].name == "Mezha.Media" and s.rss_feeds[3].default_category == "technology" and s.rss_feeds[3].scope == "ua"
-    assert s.rss_feeds[6].name == "BBC World" and s.rss_feeds[6].scope == "world"
-    assert s.rss_feeds[9].name == "The Verge" and s.rss_feeds[9].default_category == "technology" and s.rss_feeds[9].scope == "world"
+    assert len(s.rss_feeds) == 23
+    assert any(f.name == "Економічна правда" and f.default_category == "economy" and f.scope == "ua" for f in s.rss_feeds)
+    assert any(f.name == "Наука.ua" and f.default_category == "science" and f.scope == "ua" for f in s.rss_feeds)
+    assert any(f.name == "Читомо" and f.default_category == "culture" and f.scope == "ua" for f in s.rss_feeds)
+    assert any(f.name == "ТаблоID" and f.default_category == "showbiz" and f.scope == "ua" for f in s.rss_feeds)
+    assert any(f.name == "CNBC Economy" and f.default_category == "economy" and f.scope == "world" for f in s.rss_feeds)
+    assert any(f.name == "Nature News" and f.default_category == "science" and f.scope == "world" for f in s.rss_feeds)
+    assert any(f.name == "BBC Culture" and f.default_category == "culture" and f.scope == "world" for f in s.rss_feeds)
+    assert any(f.name == "Variety" and f.default_category == "showbiz" and f.scope == "world" for f in s.rss_feeds)
 
 
 def test_custom_rss_feeds(monkeypatch):
