@@ -23,7 +23,9 @@ def create_scheduler(
     summarizer: GeminiSummarizer,
 ) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=timezone.utc)
-    feed_sources = [FeedSource(name=f.name, url=f.url) for f in settings.rss_feeds]
+    feed_sources = [
+        FeedSource(name=f.name, url=f.url, default_category=f.default_category) for f in settings.rss_feeds
+    ]
 
     scheduler.add_job(
         fetch_and_store_rss_news,
