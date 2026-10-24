@@ -64,6 +64,12 @@ def _migrate_sqlite_schema(connection) -> None:  # noqa: ANN001
             connection.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_news_items_scope_published ON news_items(scope, published_at);"
             )
+            # Ensure articles from known world sources have scope='world'
+            connection.exec_driver_sql(
+                "UPDATE news_items SET scope = 'world' WHERE source IN "
+                "('BBC World', 'The Guardian', 'DW World', 'The Verge', 'TechCrunch', 'Ars Technica', 'Wired') "
+                "AND (scope IS NULL OR scope != 'world');"
+            )
     except Exception:
         logger.exception("Schema migration check failed")
 

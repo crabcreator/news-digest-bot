@@ -147,6 +147,9 @@ async def test_scheduler_has_jobs():
     assert set(jobs_by_id) == {"fetch_rss", "send_digests", "cleanup_data"}
     # Regression: the startup fetch was skipped as "missed" when bot startup took >1s.
     assert jobs_by_id["fetch_rss"].misfire_grace_time >= 60
+    sources = jobs_by_id["fetch_rss"].args[1]
+    assert any(s.scope == "world" for s in sources)
+    assert any(s.scope == "ua" for s in sources)
 
 
 async def test_cleanup_job_executes(session_factory):
