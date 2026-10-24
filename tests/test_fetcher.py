@@ -119,3 +119,44 @@ async def test_ingest_feeds_assigns_default_category(session, monkeypatch):
     assert await ingest_feeds(session, [tech_src], http=DummyHttp()) == 1
     item = (await session.scalars(select(NewsItem).where(NewsItem.url == "https://example.com/item-tech-1"))).one()
     assert item.category == "technology"
+
+
+def test_categorizer_english_keywords():
+    assert infer_category("Military troops report frontline missile strikes in the east") == "war"
+    assert infer_category("White House summit: President meets minister to discuss sanctions") == "politics"
+    assert infer_category("Central bank warns of inflation risks on the stock market") == "economy"
+    assert infer_category("New gadget software launch includes cyber security update") == "technology"
+    assert infer_category("NASA telescope scientists make physics discovery in galaxy") == "science"
+    assert infer_category("Hollywood celebrity pop star attends movie premiere") == "showbiz"
+    assert infer_category("Hospital workers protest health policy after earthquake") == "society"
+
+
+async def test_ingest_feeds_assigns_world_scope(session, monkeypatch):
+    from sqlalchemy import select
+    from db.models import NewsItem
+    from services.fetcher import rss_client
+
+    world_src = FeedSource("BBC World", "https://example.com/world", scope="world")
+    world_rss = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>World Leaders Meet at Summit</title>
+<link>https://example.com/world-item-1</link>
+<description>World news description</description>
+<pubDate>Thu, 22 Oct 2026 13:00:00 +0300</pubDate></item>
+</channel></rss>""".encode("utf-8")
+
+    async def fake_fetch_all(http, sources):
+        return parse_feed_bytes(world_rss, world_src)
+
+    async def fake_summary(http, url, snippet):
+        return "Summary text"
+
+    monkeypatch.setattr(rss_client, "fetch_all_feeds", fake_fetch_all)
+    monkeypatch.setattr(rss_client, "build_summary", fake_summary)
+
+    class DummyHttp:
+        async def close(self): ...
+
+    assert await ingest_feeds(session, [world_src], http=DummyHttp()) == 1
+    item = (await session.scalars(select(NewsItem).where(NewsItem.url == "https://example.com/world-item-1"))).one()
+    assert item.scope == "world"

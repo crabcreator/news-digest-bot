@@ -57,6 +57,7 @@ def cache_key(
     categories: Sequence[str],
     mode: Mode,
     tech_subcategories: Sequence[str] | None = None,
+    scope: str = "ua",
 ) -> str:
     cats = _normalize(categories)
     group = "all" if len(cats) == len(ALL_CATEGORY_KEYS) else crud.make_category_group(cats)
@@ -64,7 +65,8 @@ def cache_key(
         valid_sub = sorted(set(k for k in tech_subcategories if k in TECH_SUBCATEGORY_KEYS))
         if len(valid_sub) < len(TECH_SUBCATEGORY_KEYS):
             group = f"{group}[tech:{','.join(valid_sub)}]"
-    return f"{PROFILES[mode].group_prefix}{group}"
+    scope_prefix = "world:" if scope == "world" else ""
+    return f"{scope_prefix}{PROFILES[mode].group_prefix}{group}"
 
 
 async def get_or_generate_digest(
@@ -75,6 +77,7 @@ async def get_or_generate_digest(
     timezone: str = "Europe/Kyiv",
     now_utc: datetime | None = None,
     tech_subcategories: Sequence[str] | None = None,
+    scope: str = "ua",
 ) -> DigestResult:
     """Return a fresh cached digest or generate one.
 
@@ -86,40 +89,45 @@ async def get_or_generate_digest(
     target_date = now_utc.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo(timezone)).date()
 
     if not cats:
-        return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
+        return DigestResult(render_empty_digest(target_date, profile.window_label, scope=scope), None, False)
 
-    key = cache_key(cats, mode, tech_subcategories=tech_subcategories)
+    key = cache_key(cats, mode, tech_subcategories=tech_subcategories, scope=scope)
     lock = _locks.setdefault(key, asyncio.Lock())
     async with lock:
         cached = await crud.get_fresh_digest(db, target_date, key, profile.cache_ttl, now_utc)
         if cached:
             return DigestResult(cached.content, cached.id, True)
 
-        items = await crud.get_news_since(db, now_utc - timedelta(hours=profile.window_hours), cats)
+        items = await crud.get_news_since(db, now_utc - timedelta(hours=profile.window_hours), cats, scope=scope)
         if not items:
-            return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
+            return DigestResult(render_empty_digest(target_date, profile.window_label, scope=scope), None, False)
 
         try:
             try:
                 topics = await summarizer.generate_topics(
-                    items, cats, profile.window_hours, tech_subcategories=tech_subcategories
+                    items, cats, profile.window_hours, tech_subcategories=tech_subcategories, scope=scope
                 )
             except TypeError:
-                topics = await summarizer.generate_topics(items, cats, profile.window_hours)
+                try:
+                    topics = await summarizer.generate_topics(
+                        items, cats, profile.window_hours, tech_subcategories=tech_subcategories
+                    )
+                except TypeError:
+                    topics = await summarizer.generate_topics(items, cats, profile.window_hours)
         except SummarizationError:
             # Gemini is down/overloaded: serve plain headlines instead of failing. Not cached, so the
             # next request tries Gemini again.
             fallback_text = render_digest(
-                build_fallback_topics(items, cats), items, cats, target_date, notice=FALLBACK_NOTICE
+                build_fallback_topics(items, cats), items, cats, target_date, notice=FALLBACK_NOTICE, scope=scope
             )
             if fallback_text is None:
                 raise
             logger.warning("Gemini unavailable; serving extractive fallback digest (key=%s)", key)
             return DigestResult(fallback_text, None, False)
-        text = render_digest(topics, items, cats, target_date)
+        text = render_digest(topics, items, cats, target_date, scope=scope)
         if text is None:
             # Gemini found nothing significant (or nothing valid): calm notice, not cached.
-            return DigestResult(render_empty_digest(target_date, profile.window_label), None, False)
+            return DigestResult(render_empty_digest(target_date, profile.window_label, scope=scope), None, False)
 
         digest = await crud.save_digest(db, target_date, text, key)
         logger.info("Generated digest %s (%d topics, key=%s)", digest.id, len(topics), key)

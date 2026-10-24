@@ -15,9 +15,12 @@ from bot.keyboards.inline import (
     TechSubcategoryCB,
     TimeCB,
     TimezoneCB,
+    WorldCategoryCB,
     settings_keyboard,
     tech_subcategories_keyboard,
     timezone_keyboard,
+    ua_categories_keyboard,
+    world_categories_keyboard,
 )
 from core.config import Settings
 from db import crud
@@ -50,13 +53,19 @@ async def test_settings_keyboard_marks_selection(session):
     kb = settings_keyboard(user)
     labels = [b.text for row in kb.inline_keyboard for b in row]
     assert "✅ 21:00" in labels and "13:00" in labels
-    assert any(l.startswith("▫️") and "Культура" in l for l in labels)
-    assert any("Наука" in l for l in labels)
-    assert any("Шоу-бізнес" in l for l in labels)
-    assert sum(1 for l in labels if l.startswith("✅") and "21:00" not in l) == 7
+    assert any("Новини України" in l for l in labels)
+    assert any("Світові новини" in l for l in labels)
     assert any("Вимкнути" in l for l in labels)
     # callback data must fit Telegram's 64-byte limit
     assert all(len(b.callback_data.encode()) <= 64 for row in kb.inline_keyboard for b in row)
+
+    ukb = ua_categories_keyboard(user)
+    ulabels = [b.text for row in ukb.inline_keyboard for b in row]
+    assert any(l.startswith("▫️") and "Культура" in l for l in ulabels)
+    assert any("Наука" in l for l in ulabels)
+    assert any("Шоу-бізнес" in l for l in ulabels)
+    assert sum(1 for l in ulabels if l.startswith("✅")) == 7
+    assert all(len(b.callback_data.encode()) <= 64 for row in ukb.inline_keyboard for b in row)
 
 
 async def test_cannot_disable_last_category(session):
@@ -111,15 +120,15 @@ async def test_timezone_keyboard_and_callbacks(session):
 async def test_tech_subcategories_keyboard_and_callbacks(session):
     user = await crud.get_or_create_user(session, 1)
 
-    # settings_keyboard shows tech subcategories button when technology is active
-    kb = settings_keyboard(user)
+    # ua_categories_keyboard shows tech subcategories button when technology is active
+    kb = ua_categories_keyboard(user)
     labels = [b.text for row in kb.inline_keyboard for b in row]
     assert any("Галузі технологій" in l for l in labels)
 
     # Disable technology category -> button disappears
     await crud.toggle_category(session, 1, "technology")
     await session.refresh(user)
-    kb = settings_keyboard(user)
+    kb = ua_categories_keyboard(user)
     labels = [b.text for row in kb.inline_keyboard for b in row]
     assert not any("Галузі технологій" in l for l in labels)
 
@@ -299,3 +308,79 @@ async def test_cmd_stats_restricted(session):
     await cmd_stats(msg_admin, session, settings)
     msg_admin.answer.assert_awaited_once()
     assert "Статистика бота" in msg_admin.answer.await_args.args[0]
+
+
+async def test_world_settings_navigation_and_callbacks(session):
+    user = await crud.get_or_create_user(session, 1)
+
+    msg = MagicMock(spec=Message, edit_text=AsyncMock())
+    callback = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(), message=msg)
+
+    # on_menu_ua
+    await settings_handlers.on_menu_ua(callback, session, make_settings())
+    msg.edit_text.assert_awaited_once()
+    assert "новини україни" in msg.edit_text.await_args.args[0].lower()
+
+    # on_menu_world
+    msg.edit_text.reset_mock()
+    await settings_handlers.on_menu_world(callback, session, make_settings())
+    msg.edit_text.assert_awaited_once()
+    assert "світові новини" in msg.edit_text.await_args.args[0].lower()
+
+    # world_categories_keyboard
+    wkb = world_categories_keyboard(user)
+    wlabels = [b.text for row in wkb.inline_keyboard for b in row]
+    assert any("Увімкнути світові новини" in l for l in wlabels)
+    assert any("Політика" in l for l in wlabels)
+    assert any("Назад" in l for l in wlabels)
+
+    # on_toggle_world_active
+    msg.edit_text.reset_mock()
+    await settings_handlers.on_toggle_world_active(callback, session, make_settings())
+    await session.refresh(user)
+    assert user.is_world_active is True
+    msg.edit_text.assert_awaited_once()
+
+    # on_world_category_toggled
+    msg.edit_text.reset_mock()
+    await settings_handlers.on_world_category_toggled(
+        callback, WorldCategoryCB(key="culture"), session, make_settings()
+    )
+    await session.refresh(user)
+    assert "culture" not in user.world_category_list
+    msg.edit_text.assert_awaited_once()
+
+    # cannot disable last world category
+    user.world_category_list = ["war"]
+    await session.commit()
+    callback.answer.reset_mock()
+    await settings_handlers.on_world_category_toggled(
+        callback, WorldCategoryCB(key="war"), session, make_settings()
+    )
+    assert callback.answer.await_args.kwargs.get("show_alert") is True
+
+
+async def test_cmd_now_delivers_world_digest_when_active(session, monkeypatch):
+    from services.summarizer.digest_service import DigestResult
+
+    user = await crud.get_or_create_user(session, 1)
+    await crud.set_world_active(session, 1, True)
+
+    status_message = MagicMock(delete=AsyncMock())
+    message = MagicMock(from_user=MagicMock(id=1, username="u", first_name="n"), answer=AsyncMock(return_value=status_message))
+    chat = MagicMock(id=1)
+    message.chat = chat
+
+    async def fake_get_or_gen(*args, **kwargs):
+        scope = kwargs.get("scope", "ua")
+        return DigestResult(f"DIGEST {scope}", 1, False)
+
+    monkeypatch.setattr("bot.handlers.digest.get_or_generate_digest", fake_get_or_gen)
+    send = AsyncMock()
+    monkeypatch.setattr("bot.handlers.digest.send_digest_text", send)
+
+    bot = MagicMock()
+    await cmd_now(message, bot, session, make_settings(), MagicMock())
+    assert send.await_count == 2
+    assert send.await_args_list[0].args == (bot, 1, "DIGEST ua")
+    assert send.await_args_list[1].args == (bot, 1, "DIGEST world")

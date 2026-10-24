@@ -10,8 +10,10 @@ def test_settings_load(monkeypatch):
     s = Settings(_env_file=None)
     assert s.default_delivery_hour == 21
     assert s.database_url.startswith("sqlite+aiosqlite")
-    assert len(s.rss_feeds) == 6
-    assert s.rss_feeds[3].name == "Mezha.Media" and s.rss_feeds[3].default_category == "technology"
+    assert len(s.rss_feeds) == 13
+    assert s.rss_feeds[3].name == "Mezha.Media" and s.rss_feeds[3].default_category == "technology" and s.rss_feeds[3].scope == "ua"
+    assert s.rss_feeds[6].name == "BBC World" and s.rss_feeds[6].scope == "world"
+    assert s.rss_feeds[9].name == "The Verge" and s.rss_feeds[9].default_category == "technology" and s.rss_feeds[9].scope == "world"
 
 
 def test_custom_rss_feeds(monkeypatch):

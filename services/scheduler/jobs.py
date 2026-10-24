@@ -130,5 +130,43 @@ async def check_and_send_scheduled_digests(
         results = await asyncio.gather(*(send_to(u, result.text, result.digest_id) for u in users))
         delivered += sum(results)
 
+    world_due = [u for u in due if u.is_world_active]
+    if world_due:
+        logger.info("Delivering scheduled world digests to %d user(s)", len(world_due))
+        world_groups: dict[tuple[str, str], list[User]] = defaultdict(list)
+        for user in world_due:
+            w_key = cache_key(
+                user.world_category_list,
+                "daily",
+                tech_subcategories=user.tech_subcategory_list,
+                scope="world",
+            )
+            world_groups[(w_key, user.timezone)].append(user)
+
+        for (_, timezone), w_users in world_groups.items():
+            try:
+                async with session_factory() as db:
+                    w_result = await get_or_generate_digest(
+                        db,
+                        summarizer,
+                        w_users[0].world_category_list,
+                        "daily",
+                        timezone,
+                        now_utc,
+                        tech_subcategories=w_users[0].tech_subcategory_list,
+                        scope="world",
+                    )
+            except SummarizationError:
+                logger.exception("World digest generation failed; %d user(s) skipped", len(w_users))
+                async with session_factory() as db:
+                    for user in w_users:
+                        await crud.log_delivery(db, user.id, None, "failed")
+                continue
+            except Exception:  # noqa: BLE001
+                logger.exception("Unexpected error while generating world digest")
+                continue
+
+            await asyncio.gather(*(send_to(u, w_result.text, w_result.digest_id) for u in w_users))
+
     logger.info("Scheduled delivery finished: %d/%d sent", delivered, len(due))
     return delivered

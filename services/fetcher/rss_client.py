@@ -31,15 +31,25 @@ class FeedSource:
     name: str
     url: str
     default_category: str | None = None
+    scope: str = "ua"
 
 
 DEFAULT_FEEDS: tuple[FeedSource, ...] = (
-    FeedSource("Суспільне", "https://suspilne.media/rss/all.rss"),
-    FeedSource("BBC Україна", "https://feeds.bbci.co.uk/ukrainian/rss.xml"),
-    FeedSource("Українська правда", "https://www.pravda.com.ua/rss/"),
-    FeedSource("Mezha.Media", "https://mezha.media/feed/", default_category="technology"),
-    FeedSource("AIN.UA", "https://ain.ua/feed/", default_category="technology"),
-    FeedSource("DOU", "https://dou.ua/feed/", default_category="technology"),
+    # Ukrainian feeds
+    FeedSource("Суспільне", "https://suspilne.media/rss/all.rss", scope="ua"),
+    FeedSource("BBC Україна", "https://feeds.bbci.co.uk/ukrainian/rss.xml", scope="ua"),
+    FeedSource("Українська правда", "https://www.pravda.com.ua/rss/", scope="ua"),
+    FeedSource("Mezha.Media", "https://mezha.media/feed/", default_category="technology", scope="ua"),
+    FeedSource("AIN.UA", "https://ain.ua/feed/", default_category="technology", scope="ua"),
+    FeedSource("DOU", "https://dou.ua/feed/", default_category="technology", scope="ua"),
+    # World feeds (English sources)
+    FeedSource("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", scope="world"),
+    FeedSource("The Guardian", "https://www.theguardian.com/world/rss", scope="world"),
+    FeedSource("DW World", "https://rss.dw.com/rdf/rss-en-world", scope="world"),
+    FeedSource("The Verge", "https://www.theverge.com/rss/index.xml", default_category="technology", scope="world"),
+    FeedSource("TechCrunch", "https://techcrunch.com/feed/", default_category="technology", scope="world"),
+    FeedSource("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", default_category="technology", scope="world"),
+    FeedSource("Wired", "https://www.wired.com/feed/rss", default_category="technology", scope="world"),
 )
 
 
@@ -52,6 +62,7 @@ class RawEntry:
     snippet_html: str | None
     tags: list[str]
     default_category: str | None = None
+    scope: str = "ua"
 
 
 _TRACKING_PREFIXES = ("utm_", "at_")
@@ -106,6 +117,7 @@ def parse_feed_bytes(content: bytes, source: FeedSource) -> list[RawEntry]:
                 snippet_html=snippet,
                 tags=[t.get("term", "") for t in e.get("tags", []) if t.get("term")],
                 default_category=source.default_category,
+                scope=source.scope,
             )
         )
     return entries
@@ -173,6 +185,7 @@ async def ingest_feeds(
                 published_at=entry.published_at,
                 category=category,
                 summary=summary or None,
+                scope=entry.scope,
             )
 
         items = await asyncio.gather(*(to_item(e) for e in fresh))

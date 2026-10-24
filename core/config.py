@@ -11,6 +11,7 @@ class FeedConfig(BaseModel):
     name: str
     url: str
     default_category: str | None = None
+    scope: Literal["ua", "world"] = "ua"
 
 
 class Settings(BaseSettings):
@@ -35,12 +36,21 @@ class Settings(BaseSettings):
     fetch_interval_minutes: int = Field(30, ge=5, le=120)
     rss_feeds: list[FeedConfig] = Field(
         default_factory=lambda: [
-            FeedConfig(name="Суспільне", url="https://suspilne.media/rss/all.rss"),
-            FeedConfig(name="BBC Україна", url="https://feeds.bbci.co.uk/ukrainian/rss.xml"),
-            FeedConfig(name="Українська правда", url="https://www.pravda.com.ua/rss/"),
-            FeedConfig(name="Mezha.Media", url="https://mezha.media/feed/", default_category="technology"),
-            FeedConfig(name="AIN.UA", url="https://ain.ua/feed/", default_category="technology"),
-            FeedConfig(name="DOU", url="https://dou.ua/feed/", default_category="technology"),
+            # Ukrainian feeds
+            FeedConfig(name="Суспільне", url="https://suspilne.media/rss/all.rss", scope="ua"),
+            FeedConfig(name="BBC Україна", url="https://feeds.bbci.co.uk/ukrainian/rss.xml", scope="ua"),
+            FeedConfig(name="Українська правда", url="https://www.pravda.com.ua/rss/", scope="ua"),
+            FeedConfig(name="Mezha.Media", url="https://mezha.media/feed/", default_category="technology", scope="ua"),
+            FeedConfig(name="AIN.UA", url="https://ain.ua/feed/", default_category="technology", scope="ua"),
+            FeedConfig(name="DOU", url="https://dou.ua/feed/", default_category="technology", scope="ua"),
+            # World feeds (English sources)
+            FeedConfig(name="BBC World", url="https://feeds.bbci.co.uk/news/world/rss.xml", scope="world"),
+            FeedConfig(name="The Guardian", url="https://www.theguardian.com/world/rss", scope="world"),
+            FeedConfig(name="DW World", url="https://rss.dw.com/rdf/rss-en-world", scope="world"),
+            FeedConfig(name="The Verge", url="https://www.theverge.com/rss/index.xml", default_category="technology", scope="world"),
+            FeedConfig(name="TechCrunch", url="https://techcrunch.com/feed/", default_category="technology", scope="world"),
+            FeedConfig(name="Ars Technica", url="https://feeds.arstechnica.com/arstechnica/index", default_category="technology", scope="world"),
+            FeedConfig(name="Wired", url="https://www.wired.com/feed/rss", default_category="technology", scope="world"),
         ]
     )
     # Gemini request handling

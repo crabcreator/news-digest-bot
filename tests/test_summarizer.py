@@ -345,3 +345,32 @@ def test_system_instruction_topic_limits_and_balancing():
     topics = [Topic(category="war", headline=f"H{i}", summary=f"S{i}", source_id=i) for i in range(1, 11)]
     resolved = resolve_topics(topics, {i.id: i for i in items}, ["war"])
     assert len(resolved) == 8
+
+
+def test_world_news_cache_key_and_headers():
+    from datetime import date
+    from services.summarizer.digest_service import cache_key
+    from services.summarizer.formatter import _header, render_empty_digest
+    from services.summarizer.prompts import build_user_prompt
+
+    k_ua = cache_key(ALL, "daily", scope="ua")
+    assert k_ua == "all"
+
+    k_world = cache_key(ALL, "daily", scope="world")
+    assert k_world == "world:all"
+
+    k_world_now = cache_key(ALL, "now", scope="world")
+    assert k_world_now == "world:now:all"
+
+    hdr_ua = _header(date(2026, 10, 24), scope="ua")
+    assert "📰 <b>Головне за день</b>" in hdr_ua
+
+    hdr_world = _header(date(2026, 10, 24), scope="world")
+    assert "🌍 <b>Світові новини</b>" in hdr_world
+
+    empty_world = render_empty_digest(date(2026, 10, 24), scope="world")
+    assert "🌍 <b>Світові новини</b>" in empty_world
+    assert "у світі" in empty_world
+
+    prompt_world = build_user_prompt([item(1, "war")], ["war"], 24, scope="world")
+    assert "WORLD NEWS" in prompt_world

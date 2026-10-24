@@ -36,8 +36,10 @@ def format_date(d: date) -> str:
     return d.strftime("%d.%m.%Y")
 
 
-def _header(target_date: date, body_chars: int | None = None) -> str:
-    title = f"📰 <b>Головне за день</b> | {format_date(target_date)}"
+def _header(target_date: date, body_chars: int | None = None, scope: str = "ua") -> str:
+    icon = "🌍" if scope == "world" else "📰"
+    label = "Світові новини" if scope == "world" else "Головне за день"
+    title = f"{icon} <b>{label}</b> | {format_date(target_date)}"
     if body_chars is None:
         return title
     minutes = max(1, round(body_chars / 6 / WORDS_PER_MINUTE))  # ~6 chars per word incl. space
@@ -62,10 +64,10 @@ def _render_sections(by_category: dict[str, list[str]]) -> list[str]:
     return sections
 
 
-def _assemble(target_date: date, sections: list[str], notice: str | None = None) -> str:
+def _assemble(target_date: date, sections: list[str], notice: str | None = None, scope: str = "ua") -> str:
     body = _SECTION_SEP.join(sections + [FOOTER])
     intro = f"{notice}\n\n" if notice else ""
-    return f"{_header(target_date, len(body))}\n\n{intro}{body}"
+    return f"{_header(target_date, len(body), scope=scope)}\n\n{intro}{body}"
 
 
 def resolve_topics(
@@ -98,6 +100,7 @@ def render_digest(
     target_date: date,
     max_chars: int = TARGET_MAX_CHARS,
     notice: str | None = None,
+    scope: str = "ua",
 ) -> str | None:
     """Build the final HTML digest, or return None if no valid topic remains after validation.
 
@@ -109,18 +112,19 @@ def render_digest(
         by_category: dict[str, list[str]] = {}
         for category, topic, item in resolved:
             by_category.setdefault(category, []).append(_render_topic(topic, item))
-        text = _assemble(target_date, _render_sections(by_category), _esc(notice) if notice else None)
+        text = _assemble(target_date, _render_sections(by_category), _esc(notice) if notice else None, scope=scope)
         if len(text) <= max_chars or len(resolved) == 1:
             return text
         resolved.pop()
     return None
 
 
-def render_empty_digest(target_date: date, window_label: str = "") -> str:
+def render_empty_digest(target_date: date, window_label: str = "", scope: str = "ua") -> str:
     suffix = f" {window_label}" if window_label else ""
+    target_place = " у світі" if scope == "world" else ""
     return (
-        f"{_header(target_date)}\n\n"
-        f"🌿 Поки що нічого значущого{suffix} не сталося — або підходящих новин за обраними темами немає. "
+        f"{_header(target_date, scope=scope)}\n\n"
+        f"🌿 Поки що нічого значущого{suffix} не сталося{target_place} — або підходящих новин за обраними темами немає. "
         f"Спробуйте пізніше.\n\n{DIVIDER}\n{FOOTER}"
     )
 

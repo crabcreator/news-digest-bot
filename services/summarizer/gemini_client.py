@@ -61,12 +61,15 @@ class GeminiSummarizer:
         categories: Sequence[str],
         window_hours: int,
         tech_subcategories: Sequence[str] | None = None,
+        scope: str = "ua",
     ) -> list[Topic]:
         """Cluster and summarize `items`. Retries transient failures up to `max_attempts` times."""
         if not items:
             return []
 
-        prompt = build_user_prompt(items, categories, window_hours, tech_subcategories=tech_subcategories)
+        prompt = build_user_prompt(
+            items, categories, window_hours, tech_subcategories=tech_subcategories, scope=scope
+        )
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             response_mime_type="application/json",

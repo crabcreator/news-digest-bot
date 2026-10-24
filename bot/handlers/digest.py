@@ -61,6 +61,22 @@ async def cmd_now(
         await status_message.delete()
     await send_digest_text(bot, user.id, result.text)
 
+    if user.is_world_active:
+        try:
+            async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
+                world_result = await get_or_generate_digest(
+                    session,
+                    summarizer,
+                    user.world_category_list,
+                    "now",
+                    user.timezone,
+                    tech_subcategories=user.tech_subcategory_list,
+                    scope="world",
+                )
+            await send_digest_text(bot, user.id, world_result.text)
+        except Exception:
+            logger.exception("Failed to deliver world digest in /now for user %s", user.id)
+
 
 def create_router() -> Router:
     router = Router(name="digest")

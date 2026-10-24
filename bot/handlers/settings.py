@@ -17,9 +17,12 @@ from bot.keyboards.inline import (
     TechSubcategoryCB,
     TimeCB,
     TimezoneCB,
+    WorldCategoryCB,
     settings_keyboard,
     tech_subcategories_keyboard,
     timezone_keyboard,
+    ua_categories_keyboard,
+    world_categories_keyboard,
 )
 from bot.keyboards.reply import BTN_NOW, BTN_SETTINGS, main_menu
 from bot.utils import ensure_user
@@ -46,12 +49,36 @@ def parse_time(text: str) -> tuple[int, int] | None:
 
 
 def settings_text(user: User) -> str:
-    status = "увімкнено ✅" if user.is_active else "вимкнено 🔕"
+    status_ua = "увімкнено ✅" if user.is_active else "вимкнено 🔕"
+    status_world = "увімкнено ✅" if user.is_world_active else "вимкнено 🔕"
+    ua_count = len(user.category_list)
+    world_count = len(user.world_category_list)
     return (
         "⚙️ <b>Налаштування</b>\n\n"
         f"⏰ Час доставки: <b>{user.delivery_hour:02d}:{user.delivery_minute:02d}</b> ({html.escape(user.timezone)})\n"
-        f"📬 Щоденний дайджест: <b>{status}</b>\n\n"
-        "Оберіть час і теми, які вас цікавлять:"
+        f"📬 Головний дайджест: <b>{status_ua}</b>\n"
+        f"🌍 Світові новини: <b>{status_world}</b>\n\n"
+        f"🇺🇦 <b>Новини України:</b> {ua_count} з 8 тем\n"
+        f"🌍 <b>Світові новини:</b> {world_count} з 8 тем\n\n"
+        "Оберіть розділ тем або змініть час доставки:"
+    )
+
+
+def ua_categories_text(user: User) -> str:
+    return (
+        "🇺🇦 <b>Новини України</b>\n\n"
+        f"Обрано тем: <b>{len(user.category_list)}</b> з 8\n"
+        "Натисніть на тему, щоб увімкнути або вимкнути її:"
+    )
+
+
+def world_categories_text(user: User) -> str:
+    status = "увімкнено ✅ (надсилається 2-м повідомленням)" if user.is_world_active else "вимкнено 🔕"
+    return (
+        "🌍 <b>Світові новини</b>\n\n"
+        f"Статус світового дайджесту: <b>{status}</b>\n"
+        f"Обрано тем: <b>{len(user.world_category_list)}</b> з 8\n"
+        "Натисніть на тему, щоб увімкнути або вимкнути її:"
     )
 
 
@@ -83,6 +110,28 @@ async def on_time_selected(
     await _refresh(callback, user)
 
 
+async def on_menu_ua(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(ua_categories_text(user), reply_markup=ua_categories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
+async def on_menu_world(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(world_categories_text(user), reply_markup=world_categories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
 async def on_category_toggled(
     callback: CallbackQuery, callback_data: CategoryCB, session: AsyncSession, settings: Settings
 ) -> None:
@@ -95,8 +144,45 @@ async def on_category_toggled(
         return
     user = await crud.toggle_category(session, user.id, callback_data.key)
     await callback.answer()
-    if user:
-        await _refresh(callback, user)
+    if user and isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(ua_categories_text(user), reply_markup=ua_categories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
+async def on_world_category_toggled(
+    callback: CallbackQuery, callback_data: WorldCategoryCB, session: AsyncSession, settings: Settings
+) -> None:
+    if callback_data.key not in CATEGORY_BY_KEY:
+        await callback.answer()
+        return
+    user = await ensure_user(session, callback.from_user, settings)
+    if user.world_category_list == [callback_data.key]:
+        await callback.answer("Потрібна хоча б одна тема", show_alert=True)
+        return
+    user = await crud.toggle_world_category(session, user.id, callback_data.key)
+    await callback.answer()
+    if user and isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(world_categories_text(user), reply_markup=world_categories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
+
+
+async def on_toggle_world_active(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
+    user = await ensure_user(session, callback.from_user, settings)
+    await crud.set_world_active(session, user.id, not user.is_world_active)
+    await session.refresh(user)
+    await callback.answer("Світові новини увімкнено" if user.is_world_active else "Світові новини вимкнено")
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(world_categories_text(user), reply_markup=world_categories_keyboard(user))
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc):
+                raise
 
 
 async def on_toggle_active(callback: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
@@ -206,7 +292,11 @@ def create_router() -> Router:
     router.message.register(show_settings, Command("settings"))
     router.message.register(show_settings, F.text == BTN_SETTINGS)
     router.callback_query.register(on_time_selected, TimeCB.filter())
+    router.callback_query.register(on_menu_ua, ActionCB.filter(F.name == "menu_ua"))
+    router.callback_query.register(on_menu_world, ActionCB.filter(F.name == "menu_world"))
     router.callback_query.register(on_category_toggled, CategoryCB.filter())
+    router.callback_query.register(on_world_category_toggled, WorldCategoryCB.filter())
+    router.callback_query.register(on_toggle_world_active, ActionCB.filter(F.name == "toggle_world_active"))
     router.callback_query.register(on_toggle_active, ActionCB.filter(F.name == "toggle_active"))
     router.callback_query.register(on_pick_timezone, ActionCB.filter(F.name == "pick_timezone"))
     router.callback_query.register(on_back_to_settings, ActionCB.filter(F.name == "back_to_settings"))
