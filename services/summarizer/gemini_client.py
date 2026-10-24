@@ -40,11 +40,11 @@ class GeminiSummarizer:
         self,
         api_key: str,
         model: str = "gemini-3.5-flash",
-        timeout_seconds: int = 90,
+        timeout_seconds: int = 25,
         max_attempts: int = 3,
         client: genai.Client | None = None,
         backoff_base_seconds: float = 2.0,
-        fallback_model: str | None = None,
+        fallback_model: str | None = "gemini-flash-lite-latest",
     ) -> None:
         self._client = client or genai.Client(
             api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000)

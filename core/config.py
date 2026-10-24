@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(..., description="Google AI Studio API key")
     gemini_model: str = "gemini-3.5-flash"
     # Used on retries when the primary model is overloaded (503/504); empty disables it.
-    gemini_fallback_model: str | None = "gemini-3.8-flash"
+    gemini_fallback_model: str | None = "gemini-flash-lite-latest"
     database_url: str = "sqlite+aiosqlite:///./data/news_bot.db"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         ]
     )
     # Gemini request handling
-    gemini_timeout_seconds: int = Field(90, ge=5)
+    gemini_timeout_seconds: int = Field(25, ge=5)
     gemini_max_attempts: int = Field(3, ge=1)
 
     admin_ids: list[int] | str = Field(default_factory=list)
