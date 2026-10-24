@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class FeedConfig(BaseModel):
     name: str
     url: str
+    default_category: str | None = None
 
 
 class Settings(BaseSettings):
@@ -37,6 +38,9 @@ class Settings(BaseSettings):
             FeedConfig(name="Суспільне", url="https://suspilne.media/rss/all.rss"),
             FeedConfig(name="BBC Україна", url="https://feeds.bbci.co.uk/ukrainian/rss.xml"),
             FeedConfig(name="Українська правда", url="https://www.pravda.com.ua/rss/"),
+            FeedConfig(name="Mezha.Media", url="https://mezha.media/feed/", default_category="technology"),
+            FeedConfig(name="AIN.UA", url="https://ain.ua/feed/", default_category="technology"),
+            FeedConfig(name="DOU", url="https://dou.ua/feed/", default_category="technology"),
         ]
     )
     # Gemini request handling

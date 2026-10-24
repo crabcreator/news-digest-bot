@@ -10,17 +10,22 @@ def test_settings_load(monkeypatch):
     s = Settings(_env_file=None)
     assert s.default_delivery_hour == 21
     assert s.database_url.startswith("sqlite+aiosqlite")
-    assert len(s.rss_feeds) == 3
+    assert len(s.rss_feeds) == 6
+    assert s.rss_feeds[3].name == "Mezha.Media" and s.rss_feeds[3].default_category == "technology"
 
 
 def test_custom_rss_feeds(monkeypatch):
     monkeypatch.setenv("BOT_TOKEN", "t")
     monkeypatch.setenv("GEMINI_API_KEY", "k")
-    monkeypatch.setenv("RSS_FEEDS", '[{"name": "Custom", "url": "https://example.com/rss"}]')
+    monkeypatch.setenv(
+        "RSS_FEEDS",
+        '[{"name": "Custom Tech", "url": "https://example.com/rss", "default_category": "technology"}]',
+    )
     s = Settings(_env_file=None)
     assert len(s.rss_feeds) == 1
-    assert s.rss_feeds[0].name == "Custom"
+    assert s.rss_feeds[0].name == "Custom Tech"
     assert s.rss_feeds[0].url == "https://example.com/rss"
+    assert s.rss_feeds[0].default_category == "technology"
 
 
 def test_admin_ids_parsing(monkeypatch):

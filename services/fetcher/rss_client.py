@@ -30,12 +30,16 @@ ENRICH_CONCURRENCY = 5
 class FeedSource:
     name: str
     url: str
+    default_category: str | None = None
 
 
 DEFAULT_FEEDS: tuple[FeedSource, ...] = (
     FeedSource("Суспільне", "https://suspilne.media/rss/all.rss"),
     FeedSource("BBC Україна", "https://feeds.bbci.co.uk/ukrainian/rss.xml"),
     FeedSource("Українська правда", "https://www.pravda.com.ua/rss/"),
+    FeedSource("Mezha.Media", "https://mezha.media/feed/", default_category="technology"),
+    FeedSource("AIN.UA", "https://ain.ua/feed/", default_category="technology"),
+    FeedSource("DOU", "https://dou.ua/feed/", default_category="technology"),
 )
 
 
@@ -47,6 +51,7 @@ class RawEntry:
     published_at: datetime  # naive UTC
     snippet_html: str | None
     tags: list[str]
+    default_category: str | None = None
 
 
 _TRACKING_PREFIXES = ("utm_", "at_")
@@ -100,6 +105,7 @@ def parse_feed_bytes(content: bytes, source: FeedSource) -> list[RawEntry]:
                 published_at=entry_published_utc(e),
                 snippet_html=snippet,
                 tags=[t.get("term", "") for t in e.get("tags", []) if t.get("term")],
+                default_category=source.default_category,
             )
         )
     return entries
@@ -159,12 +165,13 @@ async def ingest_feeds(
         async def to_item(entry: RawEntry) -> NewsItemData:
             async with semaphore:
                 summary = await build_summary(http, entry.url, entry.snippet_html)
+            category = entry.default_category or infer_category(entry.title, summary, entry.tags)
             return NewsItemData(
                 url=entry.url,
                 title=entry.title,
                 source=entry.source,
                 published_at=entry.published_at,
-                category=infer_category(entry.title, summary, entry.tags),
+                category=category,
                 summary=summary or None,
             )
 

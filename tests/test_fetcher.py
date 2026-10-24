@@ -88,3 +88,34 @@ async def test_ingest_feeds_dedups(session, monkeypatch):
 
     assert await ingest_feeds(session, [SRC], http=DummyHttp()) == 1
     assert await ingest_feeds(session, [SRC], http=DummyHttp()) == 0
+
+
+async def test_ingest_feeds_assigns_default_category(session, monkeypatch):
+    from sqlalchemy import select
+    from db.models import NewsItem
+    from services.fetcher import rss_client
+
+    tech_src = FeedSource("TechSrc", "https://example.com/tech", default_category="technology")
+    tech_rss = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>Простий нейтральний заголовок без ключових слів</title>
+<link>https://example.com/item-tech-1</link>
+<description>Опис</description>
+<pubDate>Thu, 22 Oct 2026 13:00:00 +0300</pubDate></item>
+</channel></rss>""".encode("utf-8")
+
+    async def fake_fetch_all(http, sources):
+        return parse_feed_bytes(tech_rss, tech_src)
+
+    async def fake_summary(http, url, snippet):
+        return "Текст опису."
+
+    monkeypatch.setattr(rss_client, "fetch_all_feeds", fake_fetch_all)
+    monkeypatch.setattr(rss_client, "build_summary", fake_summary)
+
+    class DummyHttp:
+        async def close(self): ...
+
+    assert await ingest_feeds(session, [tech_src], http=DummyHttp()) == 1
+    item = (await session.scalars(select(NewsItem).where(NewsItem.url == "https://example.com/item-tech-1"))).one()
+    assert item.category == "technology"
