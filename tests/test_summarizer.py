@@ -234,6 +234,10 @@ def test_render_keeps_apostrophes_readable():
 def test_empty_fallback_model_env_means_none(monkeypatch):
     from core.config import Settings
 
+    s_default = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
+    assert s_default.gemini_fallback_model == "gemini-flash-lite-latest"
+    assert s_default.gemini_timeout_seconds == 25
+
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
     s = Settings(bot_token="1:T", gemini_api_key="k", _env_file=None)
     assert s.gemini_fallback_model is None
