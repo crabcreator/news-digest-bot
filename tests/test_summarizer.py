@@ -325,3 +325,23 @@ def test_cache_key_with_tech_subcategories():
     # subset of tech subcategories -> suffixed key
     k2 = cache_key(ALL, "daily", tech_subcategories=["ai", "cybersec"])
     assert k2 == "all[tech:ai,cybersec]"
+
+
+def test_divider_uses_em_dashes():
+    assert DIVIDER == "———————————————"
+    assert all(ch == "—" for ch in DIVIDER)
+
+
+def test_system_instruction_topic_limits_and_balancing():
+    from services.summarizer.prompts import MAX_TOPICS, MIN_TOPICS, SYSTEM_INSTRUCTION
+    from services.summarizer.formatter import resolve_topics
+
+    assert MAX_TOPICS == 8 and MIN_TOPICS == 5
+    assert "5-8 most significant events" in SYSTEM_INSTRUCTION
+    assert "strive to include at least 1 event from each allowed category" in SYSTEM_INSTRUCTION
+
+    # resolve_topics respects new MAX_TOPICS = 8
+    items = [item(i, "war") for i in range(1, 11)]
+    topics = [Topic(category="war", headline=f"H{i}", summary=f"S{i}", source_id=i) for i in range(1, 11)]
+    resolved = resolve_topics(topics, {i.id: i for i in items}, ["war"])
+    assert len(resolved) == 8

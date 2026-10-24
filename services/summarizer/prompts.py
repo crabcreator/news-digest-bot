@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from core.categories import CATEGORY_BY_KEY, TECH_SUBCATEGORIES, TECH_SUBCATEGORY_BY_KEY
 from db.models import NewsItem
 
-MAX_TOPICS = 7
+MAX_TOPICS = 8
 MIN_TOPICS = 5
 MAX_CONTEXT_ITEMS = 120
 MAX_ITEM_SUMMARY_CHARS = 220
@@ -20,7 +20,9 @@ Your tasks:
 1. Cluster items that describe the same event, even if they come from different sources.
 2. Discard noise: clickbait, advertising, horoscopes, minor local trivia, repeated updates without new facts.
 3. Select the {MIN_TOPICS}-{MAX_TOPICS} most significant events (fewer if there is not enough real news; \
-an empty list if nothing significant happened). Keep a sensible balance between the allowed categories.
+an empty list if nothing significant happened). Keep a sensible balance between the allowed categories: \
+strive to include at least 1 event from each allowed category (only if relevant news exists in that category), \
+instead of concentrating on a single topic.
 4. For every selected event write:
    - "category": exactly one key from the allowed categories list given in the request;
    - "headline": a short, neutral headline in Ukrainian (up to 80 characters, no clickbait, no emoji, no markup);

@@ -22,6 +22,7 @@ from bot.keyboards.inline import (
 from core.config import Settings
 from db import crud
 from services import delivery
+from services.summarizer.formatter import DIVIDER
 from services.summarizer.gemini_client import SummarizationError
 
 METHOD = SendMessage(chat_id=1, text="x")
@@ -201,7 +202,7 @@ async def test_send_falls_back_to_plain_text_on_parse_error():
 async def test_send_splits_long_digest():
     bot = MagicMock()
     bot.send_message = AsyncMock()
-    long_text = "\n\n───────────────\n\n".join("слово " * 400 for _ in range(4))
+    long_text = f"\n\n{DIVIDER}\n\n".join("слово " * 400 for _ in range(4))
     assert await delivery.send_digest_text(bot, 1, long_text) == "sent"
     assert bot.send_message.await_count > 1
 

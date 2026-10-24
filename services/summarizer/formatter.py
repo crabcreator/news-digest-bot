@@ -14,7 +14,7 @@ from db.models import NewsItem
 from services.summarizer.gemini_client import Topic
 from services.summarizer.prompts import MAX_TOPICS
 
-DIVIDER = "───────────────"
+DIVIDER = "———————————————"
 FOOTER = "⚙️ Налаштування розкладу й тем: /settings"
 TARGET_MAX_CHARS = 3800  # generation budget
 TELEGRAM_SAFE_LIMIT = 4000  # split threshold (hard Telegram limit is 4096)
