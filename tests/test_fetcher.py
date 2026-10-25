@@ -203,3 +203,48 @@ async def test_ingest_feeds_assigns_specialized_categories(session, monkeypatch)
         item = (await session.scalars(select(NewsItem).where(NewsItem.url == f"https://example.com/{f.name}"))).one()
         assert item.category == f.default_category
         assert item.scope == f.scope
+
+
+async def test_ingest_feeds_skips_deep_extraction_for_old_entries(session, monkeypatch):
+    from datetime import timedelta
+    from db.models import utcnow
+    from services.fetcher import rss_client
+    from services.fetcher.rss_client import RawEntry
+
+    now = utcnow()
+    recent_entry = RawEntry(
+        url="https://example.com/recent",
+        title="Recent News",
+        source="Test",
+        published_at=now - timedelta(hours=1),
+        snippet_html="Recent snippet",
+        tags=[],
+    )
+    old_entry = RawEntry(
+        url="https://example.com/old",
+        title="Old News",
+        source="Test",
+        published_at=now - timedelta(days=5),
+        snippet_html="Old snippet",
+        tags=[],
+    )
+
+    deep_called_urls = []
+
+    async def fake_fetch_all(http, sources):
+        return [recent_entry, old_entry]
+
+    async def fake_build_summary(http, url, snippet):
+        deep_called_urls.append(url)
+        return "Deep summary"
+
+    monkeypatch.setattr(rss_client, "fetch_all_feeds", fake_fetch_all)
+    monkeypatch.setattr(rss_client, "build_summary", fake_build_summary)
+
+    class DummyHttp:
+        async def close(self): ...
+
+    inserted = await ingest_feeds(session, [SRC], http=DummyHttp())
+    assert inserted == 2
+    assert deep_called_urls == ["https://example.com/recent"]
+

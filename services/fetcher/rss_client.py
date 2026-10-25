@@ -4,7 +4,7 @@ import asyncio
 import logging
 from calendar import timegm
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
@@ -17,13 +17,15 @@ from db import crud
 from db.crud import NewsItemData
 from db.models import utcnow
 from services.fetcher.categorizer import infer_category
-from services.fetcher.extractor import build_summary
+from services.fetcher.extractor import build_summary, extract_from_html_snippet
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "Mozilla/5.0 (compatible; NewsDigestBot/1.0)"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 MAX_FEED_BYTES = 5 * 1024 * 1024
+FEED_FETCH_CONCURRENCY = 6
 ENRICH_CONCURRENCY = 5
+INGEST_BATCH_SIZE = 25
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,8 +151,14 @@ async def fetch_feed(http: aiohttp.ClientSession, source: FeedSource) -> list[Ra
 
 
 async def fetch_all_feeds(http: aiohttp.ClientSession, sources: tuple[FeedSource, ...] | list[FeedSource]) -> list[RawEntry]:
-    """Fetch all feeds concurrently; a failing feed never blocks the others."""
-    results = await asyncio.gather(*(fetch_feed(http, s) for s in sources), return_exceptions=True)
+    """Fetch all feeds concurrently with bounded concurrency; a failing feed never blocks the others."""
+    semaphore = asyncio.Semaphore(FEED_FETCH_CONCURRENCY)
+
+    async def _bounded_fetch(source: FeedSource) -> list[RawEntry]:
+        async with semaphore:
+            return await fetch_feed(http, source)
+
+    results = await asyncio.gather(*(_bounded_fetch(s) for s in sources), return_exceptions=True)
     entries: list[RawEntry] = []
     for source, result in zip(sources, results):
         if isinstance(result, BaseException):
@@ -182,11 +190,16 @@ async def ingest_feeds(
             return 0
 
         # Only new entries are enriched, so article pages are fetched at most once.
+        # Deep extraction (fetching the article HTML) is skipped for entries older than 48h to prevent OOM on cold start.
+        cutoff = utcnow() - timedelta(hours=48)
         semaphore = asyncio.Semaphore(ENRICH_CONCURRENCY)
 
         async def to_item(entry: RawEntry) -> NewsItemData:
-            async with semaphore:
-                summary = await build_summary(http, entry.url, entry.snippet_html)
+            if entry.published_at >= cutoff:
+                async with semaphore:
+                    summary = await build_summary(http, entry.url, entry.snippet_html)
+            else:
+                summary = await asyncio.to_thread(extract_from_html_snippet, entry.snippet_html)
             category = entry.default_category or infer_category(entry.title, summary, entry.tags)
             return NewsItemData(
                 url=entry.url,
@@ -198,8 +211,12 @@ async def ingest_feeds(
                 scope=entry.scope,
             )
 
-        items = await asyncio.gather(*(to_item(e) for e in fresh))
-        inserted = await crud.add_news_items(db, items)
+        inserted = 0
+        for i in range(0, len(fresh), INGEST_BATCH_SIZE):
+            chunk = fresh[i : i + INGEST_BATCH_SIZE]
+            items = await asyncio.gather(*(to_item(e) for e in chunk))
+            inserted += await crud.add_news_items(db, items)
+
         logger.info("Ingested %d new news items (%d candidates)", inserted, len(fresh))
         return inserted
     finally:
