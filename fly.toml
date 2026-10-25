@@ -9,7 +9,6 @@ primary_region = "fra"
     destination = "/app/data"
 
 [env]
-    DATABASE_URL = "sqlite+aiosqlite:///./data/news_bot.db"
     LOG_LEVEL = "INFO"
     DEFAULT_TIMEZONE = "Europe/Kyiv"
     FETCH_INTERVAL_MINUTES = "30"
