@@ -1,0 +1,26 @@
+app = "news-digest-bot"
+primary_region = "fra"
+
+[build]
+    dockerfile = "Dockerfile"
+
+[mounts]
+    source = "bot_data"
+    destination = "/app/data"
+
+[env]
+    DATABASE_URL = "sqlite+aiosqlite:///./data/news_bot.db"
+    LOG_LEVEL = "INFO"
+    DEFAULT_TIMEZONE = "Europe/Kyiv"
+    FETCH_INTERVAL_MINUTES = "30"
+    GEMINI_MODEL = "gemini-3.5-flash"
+    GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
+    GEMINI_TIMEOUT_SECONDS = "25"
+
+[swap]
+    size_mb = 512
+
+[[vm]]
+    cpu_kind = "shared"
+    cpus = 1
+    memory_mb = 1024
