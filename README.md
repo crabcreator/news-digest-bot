@@ -1,86 +1,26 @@
 # Daily News Digest Telegram Bot
 
-An asynchronous, production-ready Telegram bot in Python that periodically aggregates news articles from official Ukrainian and international RSS feeds, stores and deduplicates them in an SQLite database, periodically generates high-quality structured daily digests using Google Gemini AI, and delivers personalized digests to registered Telegram users based on their individual time, timezone, and topic preferences.
+An asynchronous Telegram bot that aggregates news from official Ukrainian and international RSS feeds, summarizes key events using Google Gemini AI, and delivers personalized daily digests based on individual user schedules and topic preferences.
 
 ---
 
 ## Features
 
-- **Multi-Scope News (Ukraine & World):**
-  - 🇺🇦 **Ukrainian News:** Curated Ukrainian sources covering frontline events, politics, economy, culture, and tech.
-  - 🌍 **World News:** Major English-language media (BBC World, The Guardian, CNBC, Nature, Variety, TechCrunch, etc.) automatically translated and summarized directly into fluent Ukrainian. Delivered as an optional second message.
-- **Smart Summarization (Google Gemini):**
-  - Clusters related items across sources and discards clickbait/duplicates.
-  - Selects 5–8 key events balanced across user-selected categories.
-  - Fast response times: automatic failover between primary (`gemini-3.5-flash`) and ultra-fast fallback (`gemini-flash-lite-latest`) with aggressive timeouts (25s) to prevent queue hangs.
-  - Safe Telegram HTML formatting with em-dash dividers (`———————————————`) and automatic message chunking for messages exceeding Telegram's 4096-character limit.
-- **Comprehensive Topic Categorization:**
-  - **8 Main Categories:**
-    - 🪖 War & Frontline (`war`)
-    - 🏛 Politics (`politics`)
-    - 💰 Economy (`economy`)
-    - 💻 Technology (`technology`)
-    - 🔬 Science (`science`)
-    - 🎭 Culture (`culture`)
-    - 🌟 Showbiz (`showbiz`)
-    - 👥 Society (`society`)
-  - **Technology Subcategories:** Fine-grained selection under Technology:
-    - 🤖 Artificial Intelligence (AI)
-    - 🛡 Cyber Security
-    - 📱 Gadgets & Hardware
-    - 💼 IT Business & Startups
-    - 💻 Software & Development
-- **Interactive `/settings` UI:**
-  - Quick delivery time presets (`08:00`, `13:00`, `19:00`, `20:00`, `21:00`, `22:00`) or custom time (`07:30`).
-  - Timezone picker (Kyiv, Warsaw, London, Berlin, Prague, New York).
-  - Independent topic selections for Ukrainian and World news.
-  - Category selection guards (prevents deselecting all topics).
-- **On-Demand Digest (`/now`):**
-  - Instant digest for the last 4 hours, served with live typing indicators and cached for 30 minutes to minimize API quota usage.
-- **Automated Data Retention & Maintenance:**
-  - Daily cleanup job (03:00 UTC) automatically purges news older than 14 days, digests older than 30 days, and delivery logs older than 30 days.
-  - Executes `PRAGMA optimize;` daily to keep SQLite performance peak.
-- **Resilient Delivery & DevOps:**
-  - Handles Telegram `FloodWait` with exponential backoff.
-  - Automatically deactivates users who blocked the bot (`TelegramForbiddenError`).
-  - Multi-stage Docker build with non-root user and native Docker `HEALTHCHECK` with scheduler heartbeat monitoring.
+- **Dual-Scope Coverage (Ukraine & World):** Aggregates 23 curated Ukrainian and global media outlets, automatically translating and summarizing international news into fluent Ukrainian.
+- **Smart AI Summarization:** Leverages Google Gemini to cluster related stories, eliminate clickbait, and produce 5–8 balanced topics with direct source links. Includes automatic failover to fallback models to prevent timeouts.
+- **Topic Personalization:** Supports 8 core categories (War, Politics, Economy, Technology, Science, Culture, Showbiz, Society) along with specialized technology subcategories.
+- **Custom Scheduling & Timezones:** Delivers digests according to each user's chosen local time and timezone, alongside instant on-demand updates.
+- **Data Retention & Maintenance:** Automated background jobs clean up expired news and logs daily to keep the SQLite database lightweight and fast.
+- **Production-Ready Reliability:** Built-in Telegram rate-limit handling (`FloodWait`), automatic deactivation of inactive/blocked users, and healthcheck monitoring.
 
 ---
 
-## Default RSS Sources (23 Curated Feeds)
+## Curated RSS Sources
 
-### 🇺🇦 Ukrainian News (11 Feeds)
-| Source | Category / Focus | Default Category |
-| --- | --- | --- |
-| **Суспільне** | General, Frontline, Society | Dynamic |
-| **BBC Україна** | General, Politics | Dynamic |
-| **Українська правда** | General, Politics, War | Dynamic |
-| **Економічна правда** | Macroeconomics, Business, Finance | `economy` |
-| **Наука.ua** | Science, Space, Biology | `science` |
-| **Читомо** | Literature, Books, Publishing | `culture` |
-| **Vertigo** | Cinema, TV Series, Arts | `culture` |
-| **ТаблоID** | Celebrities, Eurovision, Showbiz | `showbiz` |
-| **Mezha.Media** | Hardware, Gadgets, Tech Industry | `technology` |
-| **AIN.UA** | IT Business, Startups, Investments | `technology` |
-| **DOU** | Software Development, Tech Careers | `technology` |
+- **🇺🇦 Ukrainian (11 feeds):** Суспільне, BBC Україна, Українська правда, Економічна правда, Наука.ua, Читомо, Vertigo, ТаблоID, Mezha.Media, AIN.UA, DOU.
+- **🌍 World (12 feeds):** BBC World, The Guardian, DW, CNBC, Nature, Phys.org, BBC Culture, Variety, The Verge, TechCrunch, Ars Technica, Wired.
 
-### 🌍 World News (12 Feeds)
-| Source | Category / Focus | Default Category |
-| --- | --- | --- |
-| **BBC World** | Global News, Politics, Conflict | Dynamic |
-| **The Guardian World** | World News, International Politics | Dynamic |
-| **DW World** | Global Affairs, Europe, Diplomacy | Dynamic |
-| **CNBC Economy** | Global Markets, Central Banks, Economy | `economy` |
-| **Nature News** | Groundbreaking Science & Research | `science` |
-| **Phys.org** | Physics, Astronomy, Lab Research | `science` |
-| **BBC Culture** | Global Arts, Theater, Cinema | `culture` |
-| **Variety** | Hollywood, Entertainment, Oscars/Grammys | `showbiz` |
-| **The Verge** | Big Tech, Consumer Electronics, AI | `technology` |
-| **TechCrunch** | Venture Capital, Startups, AI | `technology` |
-| **Ars Technica** | Cyber Security, Linux, Tech Policy | `technology` |
-| **Wired** | Global Tech Trends, Future Tech | `technology` |
-
-> Additional feeds can be configured dynamically without code changes using the `RSS_FEEDS` environment variable.
+> Feeds can be customized or extended without code changes via the `RSS_FEEDS` environment variable.
 
 ---
 
@@ -89,10 +29,10 @@ An asynchronous, production-ready Telegram bot in Python that periodically aggre
 | Command | Description | Access |
 | --- | --- | --- |
 | `/start` | Register user and activate daily digest subscription | All users |
-| `/settings` | Open interactive menu (schedule, timezone, UA/World topics) | All users |
-| `/now` | Generate and deliver an immediate digest for the past 4 hours | All users |
-| `/cancel` | Cancel custom time input in FSM | All users |
-| `/help` | Display command usage and features guide | All users |
+| `/settings` | Configure delivery time, timezone, and UA/World topics | All users |
+| `/now` | Immediate digest for the past 4 hours | All users |
+| `/cancel` | Cancel active time or custom input | All users |
+| `/help` | Usage instructions and bot information | All users |
 | `/stats` | View subscriber count, news volume, and delivery health | Admins only (`ADMIN_IDS`) |
 
 ---
@@ -129,7 +69,7 @@ cp .env.example .env
 | `GEMINI_TIMEOUT_SECONDS`| No | Timeout per generation attempt (seconds) | `25` |
 | `DATABASE_URL` | No | SQLite database URL with async driver | `sqlite+aiosqlite:///./data/news_bot.db` |
 | `LOG_LEVEL` | No | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
-| `FETCH_INTERVAL_MINUTES`| No | Periodic RSS fetch interval in minutes | `30` |
+| `FETCH_INTERVAL_MINUTES`| No | Periodic RSS fetch interval in minutes | `60` |
 | `ADMIN_IDS` | No | Comma-separated Telegram User IDs for `/stats` access | `""` |
 | `RSS_FEEDS` | No | Optional JSON list of custom feed sources | Defaults to all 23 feeds |
 
@@ -176,7 +116,7 @@ Run the test suite using `pytest`:
 .venv/bin/python -m pytest
 ```
 
-All 103 unit and integration tests cover:
+All 104 unit and integration tests cover:
 - Pydantic configuration & environment parsing.
 - Async database CRUD, indexes, and automated SQLite schema migrations.
 - Feed ingestion, SHA-256 deduplication, and XML security (XXE defense).
