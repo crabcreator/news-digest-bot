@@ -11,7 +11,7 @@ primary_region = "fra"
 [env]
     LOG_LEVEL = "INFO"
     DEFAULT_TIMEZONE = "Europe/Kyiv"
-    FETCH_INTERVAL_MINUTES = "30"
+    FETCH_INTERVAL_MINUTES = "60"
     GEMINI_MODEL = "gemini-3.5-flash"
     GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
     GEMINI_TIMEOUT_SECONDS = "25"
@@ -22,4 +22,4 @@ primary_region = "fra"
 [[vm]]
     cpu_kind = "shared"
     cpus = 1
-    memory_mb = 1024
+    memory_mb = 512
